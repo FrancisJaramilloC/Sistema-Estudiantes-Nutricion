@@ -69,7 +69,10 @@ async def create_plan(plan: PlanRequest):
         return {
             "task_id": task_id, 
             "status": "PENDIENTE", 
-            "message": "Solicitud recibida y registrada"
+            "message": "Solicitud recibida y registrada",
+            "status_url": f"/tasks/{task_id}",
+            "ready_url": f"/tasks/{task_id}/ready",
+            "poll_interval_seconds": 2
         }
 
     except Exception as e:
@@ -90,8 +93,35 @@ async def get_task_status(task_id: str):
     
     if not task_ref.exists:
         raise HTTPException(status_code=404, detail="No se encontró la tarea")
-        
+    
     return task_ref.to_dict()
+
+@app.get("/tasks/{task_id}/ready")
+async def get_task_ready(task_id: str):
+    """
+    Endpoint de consulta rápida para polling.
+    ready=True únicamente cuando la tarea terminó con éxito.
+    """
+    task_ref = db.collection("tasks").document(task_id).get()
+
+    if not task_ref.exists:
+        raise HTTPException(status_code=404, detail="No se encontró la tarea")
+
+    task = task_ref.to_dict()
+    status = task.get("estado_actual", "DESCONOCIDO")
+    ready = status == "COMPLETADO"
+    terminal = status in {"COMPLETADO", "FALLIDO"}
+
+    return {
+        "task_id": task_id,
+        "ready": ready,
+        "status": status,
+        "terminal": terminal,
+        "should_continue_polling": not terminal,
+        "poll_interval_seconds": 2,
+        "updated_at": task.get("updated_at"),
+        "finished_at": task.get("finished_at")
+    }
 
 @app.get("/")
 async def health_check():
