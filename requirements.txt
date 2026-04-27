@@ -2,3 +2,6 @@ fastapi
 uvicorn
 pika
 python-dotenv
+pydantic
+google-cloud-firestore
+uuid
