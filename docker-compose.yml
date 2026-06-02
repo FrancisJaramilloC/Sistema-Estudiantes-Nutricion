@@ -1,17 +1,12 @@
 version: '3.8'
 
 services:
-  rabbitmq:
-    image: rabbitmq:3-management
-    container_name: rabbitmq_nutricion
+  dynamodb:
+    image: amazon/dynamodb-local
+    container_name: dynamodb_nutricion
     ports:
-      - "5672:5672"    # RabbitMQ amqp port
-      - "15672:15672"  # RabbitMQ management UI
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      - "8001:8000"
+    command: "-jar DynamoDBLocal.jar -sharedDb"
     networks:
       - red_nutricional
 
@@ -23,26 +18,18 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - DYNAMODB_ENDPOINT_URL=http://dynamodb:8000
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=mock
+      - AWS_SECRET_ACCESS_KEY=mock
     depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - red_nutricional
-
-  worker:
-    build:
-      context: .
-      dockerfile: ./worker/Dockerfile
-    container_name: worker_nutricion
-    environment:
-      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
+      dynamodb:
+        condition: service_started
     networks:
       - red_nutricional
 
 networks:
   red_nutricional:
     driver: bridge
+
+
