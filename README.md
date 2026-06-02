@@ -45,14 +45,24 @@ Esto levantará:
 
 ---
 
-## 🧪 Pruebas de la API
+## 🧪 Pruebas de la API (Autenticación y Roles con AWS Cognito)
 
-### 1. Enviar una solicitud de plan nutricional
-Puedes enviar una solicitud usando `curl` o cualquier cliente REST (como Postman/Insomnia):
+El sistema ahora está protegido mediante autenticación con **Tokens JWT** (AWS Cognito). Para facilitar el desarrollo y pruebas locales, el sistema cuenta con tokens de prueba ("mock"):
+*   **Token Estudiante:** `mock-student-token` (Da acceso a los roles de la agrupación `Estudiantes`).
+*   **Token Docente:** `mock-teacher-token` (Da acceso a los roles de la agrupación `Docentes`).
+
+> [!IMPORTANT]
+> Si intentas acceder a cualquier endpoint sin el encabezado `Authorization`, recibirás un error `401 Unauthorized`. Si intentas acceder a un endpoint de Docentes con un token de Estudiante, recibirás un error `403 Forbidden`.
+
+---
+
+### 1. Enviar una solicitud de plan nutricional (Acceso: Estudiantes o Docentes)
+Puedes enviar una solicitud usando `curl` o cualquier cliente REST, incluyendo la cabecera de autorización:
 
 ```bash
 curl -X POST http://localhost:8000/plan \
      -H "Content-Type: application/json" \
+     -H "Authorization: Bearer mock-student-token" \
      -d '{"paciente_id": 123, "tipo_plan": "Keto"}'
 ```
 
@@ -68,11 +78,11 @@ curl -X POST http://localhost:8000/plan \
 }
 ```
 
-### 2. Consultar el estado de la tarea (Polling)
+### 2. Consultar el estado de la tarea (Polling) (Acceso: Estudiantes o Docentes)
 Para verificar el estado de procesamiento de tu plan:
 
 ```bash
-curl http://localhost:8000/tasks/TU_TASK_ID/ready
+curl -H "Authorization: Bearer mock-student-token" http://localhost:8000/tasks/TU_TASK_ID/ready
 ```
 
 **Durante el procesamiento (primeros 5 segundos):**
@@ -102,12 +112,22 @@ curl http://localhost:8000/tasks/TU_TASK_ID/ready
 }
 ```
 
-### 3. Detalle completo de la tarea
+### 3. Detalle completo de la tarea (Acceso: Estudiantes o Docentes)
 Para obtener todo el registro almacenado en DynamoDB:
 
 ```bash
-curl http://localhost:8000/tasks/TU_TASK_ID
+curl -H "Authorization: Bearer mock-student-token" http://localhost:8000/tasks/TU_TASK_ID
 ```
+
+### 4. Consultar todas las tareas del sistema (Acceso exclusivo: Docentes)
+Si intentas realizar esta consulta con un token de estudiante (`mock-student-token`), recibirás un error `403 Forbidden`. Debes utilizar el token de docente:
+
+```bash
+curl -H "Authorization: Bearer mock-teacher-token" http://localhost:8000/admin/tasks
+```
+
+**Respuesta esperada (HTTP 200):**
+Un listado con todas las tareas registradas en la base de datos de DynamoDB.
 
 ---
 

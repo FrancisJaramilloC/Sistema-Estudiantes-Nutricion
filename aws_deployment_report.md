@@ -104,3 +104,69 @@ Cuando subas tu contenedor API a una máquina virtual **EC2** o servicio de cont
     *   Asocia este Rol de IAM al perfil de instancia de tu servidor EC2 o a la definición de tarea (Task Definition) en ECS Fargate.
 3.  **El código funciona automáticamente:**
     *   Gracias al cambio estructural implementado en `get_dynamodb_resource()`, la librería `boto3` de Python detectará de manera automática el rol de la máquina de AWS y se autenticará de forma segura sin necesidad de configurar ninguna variable de credenciales en tu `.env` ni en el `docker-compose.yml`.
+
+---
+
+## 4. Gestión de Accesos y Flujo de Despliegue (Responsable: Francisco)
+
+### 4.1. Módulo de Gestión de Usuarios y Roles (AWS Cognito)
+
+#### A. Justificación del Servicio de Identidad Administrado (AWS Cognito)
+En sistemas de procesamiento nutricional y clínico, la información manipulada entra en la categoría de **datos de salud altamente sensibles**. Delegar el manejo de identidades y accesos a un desarrollo local en base de datos presenta riesgos críticos de seguridad y cumplimiento legal (normativas HIPAA, RGPD, y leyes locales de derechos de los pacientes). 
+
+Se justifica la adopción de **AWS Cognito** en lugar de una solución propia basada en base de datos local por las siguientes razones:
+1.  **Seguridad de Contraseñas Avanzada:** Cognito implementa el protocolo **SRP (Secure Remote Password)**, lo que significa que las contraseñas nunca viajan por la red.
+2.  **Cumplimiento de Estándares Internacionales:** AWS Cognito está certificado para cumplir con HIPAA, SOC 1/2/3, ISO 27001, lo cual garantiza de fábrica la encriptación de datos en tránsito y en reposo.
+3.  **Características Out-of-the-Box:** Soporta de forma nativa autenticación multifactor (MFA), políticas de complejidad de contraseñas, detección de credenciales comprometidas y bloqueo de cuentas por ataques de fuerza bruta, características complejas y costosas de programar desde cero.
+
+#### B. Configuración de Grupos de Usuarios
+Para controlar el acceso y los privilegios dentro de la plataforma del TFA, se definen dos grupos (roles) principales en el User Pool de AWS Cognito:
+*   **Estudiantes:** Usuarios con permisos restringidos. Tienen la capacidad de solicitar nuevos planes nutricionales (`POST /plan`) y consultar el estado y detalle de sus tareas asignadas (`GET /tasks/{id}`).
+*   **Docentes:** Usuarios administradores. Tienen todos los accesos del estudiante, además de endpoints exclusivos como la auditoría completa de los planes creados en el sistema (`GET /admin/tasks`), lo cual les permite evaluar y monitorear el desempeño de todos los estudiantes.
+
+#### C. Flujo de Autenticación mediante Tokens JWT
+El sistema implementa un flujo de autenticación moderno e inalámbrico basado en **OAuth 2.0 / OpenID Connect (OIDC)**:
+1.  **Inicio de Sesión:** El cliente envía sus credenciales (usuario y contraseña) directamente al endpoint de autenticación de AWS Cognito.
+2.  **Entrega de Tokens:** Tras validar las credenciales, Cognito responde con tres tokens estándar **JWT (JSON Web Tokens)**:
+    *   `IdToken`: Contiene la identidad verificada del usuario (nombre, correo) y el listado de grupos al que pertenece (`cognito:groups`).
+    *   `AccessToken`: Contiene los permisos de autorización para la API.
+    *   `RefreshToken`: Token de larga duración que permite solicitar nuevos tokens de acceso/identidad cuando expiren, sin requerir que el usuario vuelva a ingresar su clave.
+3.  **Verificación en la API (FastAPI):**
+    *   El cliente incluye el `AccessToken` o `IdToken` en la cabecera HTTP de cada petición: `Authorization: Bearer <JWT>`.
+    *   Nuestra API intercepta el token y descarga de forma segura el conjunto de claves públicas **JWKS (JSON Web Key Sets)** desde el endpoint público de Cognito (`jwks.json`).
+    *   Se valida la firma criptográfica usando el algoritmo **RS256** (clave asimétrica), la expiración del token (`exp`), el emisor (`iss`) y la audiencia (`aud`).
+    *   Finalmente, la API extrae el claim `cognito:groups` y valida si el usuario pertenece al rol requerido para el endpoint, denegando el acceso de inmediato (HTTP 403 Forbidden o HTTP 401 Unauthorized) ante cualquier anomalía.
+
+---
+
+### 4.2. Estrategia de Contenedores y DevOps (Docker + AWS App Runner)
+
+#### A. Adopción de Contenedores (Docker)
+Para garantizar la **portabilidad y consistencia** del sistema, se adoptó Docker para empaquetar el microservicio del backend.
+*   **Aislamiento:** El contenedor encapsula todas las dependencias del sistema operativo (Python 3.11, librerías como Boto3 y FastAPI, herramientas criptográficas). Esto elimina por completo el clásico problema *"funciona en mi máquina local pero no en el servidor"*.
+*   **Eficiencia:** El backend utiliza imágenes basadas en distribuciones ligeras (Debian Slim), minimizando el consumo de recursos de almacenamiento en la nube y acelerando el tiempo de arranque.
+
+#### B. Pipeline de Automatización (DevOps) con AWS App Runner
+Para el despliegue automático y continuo, se utiliza **AWS App Runner**, un servicio totalmente administrado de AWS que simplifica el ciclo de vida de los contenedores sin necesidad de configurar balanceadores de carga, VPCs complejas o clústeres de Kubernetes (ECS/EKS).
+
+El flujo de despliegue automatizado (**CI/CD**) funciona bajo el siguiente modelo:
+
+```mermaid
+graph LR
+    Dev[Desarrollador] -->|Git Push| GitHub[Repositorio GitHub]
+    GitHub -->|Webhook Trigger| AppRunner[AWS App Runner]
+    AppRunner -->|1. Build Container| DockerImage[Construye Imagen Docker]
+    AppRunner -->|2. Blue/Green Deploy| RunningApp[Nueva Versión en Línea]
+```
+
+1.  **Integración Continua (GitHub Link):**
+    *   AWS App Runner se conecta directamente al repositorio de GitHub mediante autenticación segura.
+    *   Se configura un disparador automático (trigger) para que cada `git push` a la rama principal (`main`) active el flujo.
+2.  **Construcción Automática:**
+    *   Al detectar el commit, App Runner descarga el código, lee la configuración del contenedor (a través de la definición de construcción) y compila la imagen Docker de forma transparente.
+3.  **Despliegue Continuo sin Interrupciones (Zero-Downtime Deployment):**
+    *   App Runner utiliza una estrategia de despliegue **Blue/Green**.
+    *   Primero levanta los contenedores con la *nueva versión* y realiza pruebas de salud (*health checks*).
+    *   Una vez que los nuevos contenedores responden correctamente, redirige progresivamente el tráfico de red de los usuarios hacia ellos.
+    *   Finalmente, destruye los contenedores antiguos. Esto garantiza que la plataforma del TFA nunca se caiga ni experimente interrupciones de servicio durante las actualizaciones.
+

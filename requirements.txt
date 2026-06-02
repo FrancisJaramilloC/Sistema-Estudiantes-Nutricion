@@ -4,3 +4,5 @@ python-dotenv
 pydantic
 boto3
 uuid
+pyjwt
+cryptography
