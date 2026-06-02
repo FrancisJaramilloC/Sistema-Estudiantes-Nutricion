@@ -20,13 +20,20 @@ class PlanRequest(BaseModel):
 
 def get_dynamodb_resource():
     endpoint_url = os.getenv("DYNAMODB_ENDPOINT_URL")
-    return boto3.resource(
-        'dynamodb',
-        endpoint_url=endpoint_url,
-        region_name=os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
-        aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID", "mock"),
-        aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY", "mock")
-    )
+    region_name = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
+    aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
+    aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
+    
+    kwargs = {"region_name": region_name}
+    if endpoint_url:
+        kwargs["endpoint_url"] = endpoint_url
+    if aws_access_key:
+        kwargs["aws_access_key_id"] = aws_access_key
+    if aws_secret_key:
+        kwargs["aws_secret_access_key"] = aws_secret_key
+        
+    return boto3.resource('dynamodb', **kwargs)
+
 
 def get_or_create_table():
     db = get_dynamodb_resource()
