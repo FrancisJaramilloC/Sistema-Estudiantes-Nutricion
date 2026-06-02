@@ -1,7 +1,6 @@
 fastapi
 uvicorn
-pika
 python-dotenv
 pydantic
-google-cloud-firestore
+boto3
 uuid

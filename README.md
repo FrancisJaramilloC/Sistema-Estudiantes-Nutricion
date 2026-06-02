@@ -1,14 +1,25 @@
-# Sistema Nutricional Distribuido (Productor-Consumidor)
+# Sistema Nutricional Asíncrono (FastAPI + AWS DynamoDB)
 
-Este proyecto es un boilerplate para un sistema de procesamiento nutricional basado en una arquitectura de microservicios distribuida, utilizando **RabbitMQ** como broker de mensajería, **FastAPI** para la API del productor y un **Worker** en Python para el procesamiento asíncrono.
+Este proyecto es un sistema de procesamiento nutricional basado en una arquitectura asíncrona simplificada. Utiliza **FastAPI** para la API del backend, **FastAPI BackgroundTasks** para procesar los planes en segundo plano de manera no bloqueante, y **AWS DynamoDB** para persistir el estado de las tareas.
 
 ## 🏗️ Arquitectura
 
-El sistema consta de tres componentes principales orquestados con Docker:
+El sistema consta de dos componentes principales orquestados con Docker:
 
-1.  **API (Productor):** Recibe solicitudes de planes nutricionales a través de un endpoint REST y las encola en RabbitMQ.
-2.  **RabbitMQ:** Gestiona la cola de mensajes `cola_nutricion`, garantizando que ninguna solicitud se pierda.
-3.  **Worker (Consumidor):** Escucha la cola de mensajes y procesa cada plan de forma asíncrona (simulando cálculos pesados).
+1. **API (FastAPI):** Recibe las solicitudes de planes nutricionales (`POST /plan`), registra el plan como `PENDIENTE` en la base de datos y agenda inmediatamente una tarea en segundo plano (`BackgroundTasks`) para iniciar el cálculo, retornando el control al cliente de inmediato (HTTP 202).
+2. **DynamoDB (Base de Datos):** Una instancia de DynamoDB Local que mantiene el estado, trazabilidad y logs de error de cada tarea.
+
+```mermaid
+graph TD
+    Client[Cliente / curl] -->|POST /plan| API[API Backend: FastAPI]
+    API -->|1. Registra en DB como PENDIENTE| DB[(DynamoDB Local)]
+    API -->|2. Retorna HTTP 202 + task_id| Client
+    API -->|3. Agenda tarea asíncrona| BG[FastAPI BackgroundTasks]
+    BG -->|4. Cambia estado a PROCESANDO| DB
+    BG -->|5. Simula cálculo de 5s| BG
+    BG -->|6. Cambia estado a COMPLETADO| DB
+    Client -->|GET /tasks/id/ready| API
+```
 
 ## 🚀 Requisitos
 
@@ -17,19 +28,27 @@ El sistema consta de tres componentes principales orquestados con Docker:
 
 ## 🛠️ Instalación y Despliegue
 
-Para levantar todos los servicios, simplemente ejecuta:
+Para levantar la base de datos local y la API, simplemente ejecuta en tu terminal:
 
 ```bash
-docker compose up --build
+sudo docker compose up --build
+```
+
+*(O en segundo plano usando la bandera `-d`):*
+```bash
+sudo docker compose up --build -d
 ```
 
 Esto levantará:
-*   **API:** [http://localhost:8000](http://localhost:8000)
-*   **RabbitMQ Management (Panel):** [http://localhost:15672](http://localhost:15672) (Usuario: `guest`, Clave: `guest`)
+*   **API (FastAPI):** [http://localhost:8000](http://localhost:8000)
+*   **DynamoDB Local:** `http://localhost:8001` (Internamente mapeado al puerto `8000` de su contenedor)
+
+---
 
 ## 🧪 Pruebas de la API
 
-Puedes enviar una solicitud de plan nutricional usando `curl` o cualquier cliente REST (como Postman/Insomnia):
+### 1. Enviar una solicitud de plan nutricional
+Puedes enviar una solicitud usando `curl` o cualquier cliente REST (como Postman/Insomnia):
 
 ```bash
 curl -X POST http://localhost:8000/plan \
@@ -37,10 +56,60 @@ curl -X POST http://localhost:8000/plan \
      -d '{"paciente_id": 123, "tipo_plan": "Keto"}'
 ```
 
-Al enviar esta petición:
-1.  La **API** responderá con un mensaje de éxito.
-2.  El **Worker** mostrará en los logs: `[x] Mensaje recibido del paciente ID: 123` e iniciará el procesamiento.
-3.  Después de 5 segundos, el Worker confirmará que el cálculo ha finalizado.
+**Respuesta esperada (HTTP 202):**
+```json
+{
+  "task_id": "848bb246-8800-4b8a-9861-6d73f4e24ef5",
+  "status": "PENDIENTE",
+  "message": "Solicitud recibida y registrada",
+  "status_url": "/tasks/848bb246-8800-4b8a-9861-6d73f4e24ef5",
+  "ready_url": "/tasks/848bb246-8800-4b8a-9861-6d73f4e24ef5/ready",
+  "poll_interval_seconds": 2
+}
+```
+
+### 2. Consultar el estado de la tarea (Polling)
+Para verificar el estado de procesamiento de tu plan:
+
+```bash
+curl http://localhost:8000/tasks/TU_TASK_ID/ready
+```
+
+**Durante el procesamiento (primeros 5 segundos):**
+```json
+{
+  "task_id": "TU_TASK_ID",
+  "ready": false,
+  "status": "PROCESANDO",
+  "terminal": false,
+  "should_continue_polling": true,
+  "poll_interval_seconds": 2,
+  "updated_at": "2026-06-02T19:10:00.123456"
+}
+```
+
+**Al finalizar (después de 5 segundos):**
+```json
+{
+  "task_id": "TU_TASK_ID",
+  "ready": true,
+  "status": "COMPLETADO",
+  "terminal": true,
+  "should_continue_polling": false,
+  "poll_interval_seconds": 2,
+  "updated_at": "2026-06-02T19:10:05.123456",
+  "finished_at": "2026-06-02T19:10:05.123456"
+}
+```
+
+### 3. Detalle completo de la tarea
+Para obtener todo el registro almacenado en DynamoDB:
+
+```bash
+curl http://localhost:8000/tasks/TU_TASK_ID
+```
+
+---
 
 ## 📁 Estructura del Proyecto
 
@@ -48,18 +117,8 @@ Al enviar esta petición:
 .
 ├── api/
 │   ├── Dockerfile
-│   └── main.py          # Lógica del productor (FastAPI)
-├── worker/
-│   ├── Dockerfile
-│   └── worker.py        # Lógica del consumidor (Python puro)
-├── docker-compose.yml   # Orquestación de contenedores
-├── requirements.txt     # Dependencias de Python
-└── .env                 # Variables de entorno (RABBITMQ_URL)
+│   └── main.py          # Backend (FastAPI + Boto3 + BackgroundTasks)
+├── docker-compose.yml   # Orquestación (API + DynamoDB local)
+├── requirements.txt     # Dependencias de Python (FastAPI, boto3, etc.)
+└── .gitignore           # Archivos omitidos en Git
 ```
-
-## 🔐 Configuración (12-Factor Apps)
-
-La conexión a la infraestructura se gestiona mediante la variable de entorno `RABBITMQ_URL` definida en el archivo `docker-compose.yml` y replicada opcionalmente en el archivo `.env`.
-
----
-Desarrollado para la gestión eficiente de planes nutricionales distribuidos.
