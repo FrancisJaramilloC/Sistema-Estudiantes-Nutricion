@@ -33,6 +33,18 @@ services:
     networks:
       - red_nutricional
 
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend_nutricion
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+    networks:
+      - red_nutricional
+
 networks:
   red_nutricional:
     driver: bridge

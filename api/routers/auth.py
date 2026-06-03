@@ -15,6 +15,9 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     role: UserRole  # Genera un dropdown en Swagger UI
+    nombre: str
+    cedula: str
+    fecha_nacimiento: str
 
 class LoginRequest(BaseModel):
     username: str
@@ -35,13 +38,16 @@ def register(req: RegisterRequest):
     client = get_cognito_client()
     
     try:
-        # 1. Registrar al usuario en el Cognito User Pool
+        # 1. Registrar al usuario en el Cognito User Pool con atributos estándar
         client.sign_up(
             ClientId=config.COGNITO_APP_CLIENT_ID,
             Username=req.username,
             Password=req.password,
             UserAttributes=[
-                {'Name': 'email', 'Value': req.email}
+                {'Name': 'email', 'Value': req.email},
+                {'Name': 'name', 'Value': req.nombre},
+                {'Name': 'birthdate', 'Value': req.fecha_nacimiento},
+                {'Name': 'profile', 'Value': req.cedula}  # Usamos el atributo estándar 'profile' para almacenar la cédula
             ]
         )
         
