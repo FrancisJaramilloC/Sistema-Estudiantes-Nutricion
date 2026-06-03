@@ -40,6 +40,8 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(securi
 def require_role(allowed_groups: list):
     def dependency(user: dict = Depends(get_current_user)):
         groups = user.get("cognito:groups", [])
+        if not groups:
+            groups = ["Estudiantes"]
         if not any(g in allowed_groups for g in groups):
             raise HTTPException(
                 status_code=403, 

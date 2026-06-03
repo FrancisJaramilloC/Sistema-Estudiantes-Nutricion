@@ -1,6 +1,6 @@
 from enum import Enum
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 import boto3
 import config
 
@@ -12,7 +12,7 @@ class UserRole(str, Enum):
 
 class RegisterRequest(BaseModel):
     username: str
-    email: EmailStr
+    email: str
     password: str
     role: UserRole  # Genera un dropdown en Swagger UI
 
