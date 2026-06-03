@@ -104,25 +104,47 @@ export default function Dashboard({ token, username, onLogout }) {
         </button>
       </div>
 
-      {/* Información del Usuario */}
+      {/* Información del Usuario (Demostración de Persistencia en AWS Cognito) */}
       <div style={{ 
-        background: 'rgba(255, 255, 255, 0.03)', 
-        border: '1px solid hsl(var(--card-border))', 
+        background: 'rgba(16, 185, 129, 0.03)', 
+        border: '1px solid rgba(16, 185, 129, 0.2)', 
         borderRadius: '12px', 
-        padding: '16px', 
+        padding: '20px', 
         marginBottom: '24px' 
       }}>
-        <p style={{ fontWeight: 600, color: 'hsl(var(--text-primary))' }}>
-          Usuario: <span style={{ color: 'hsl(var(--primary))' }}>{username}</span>
-        </p>
-        <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', marginTop: '4px' }}>
-          Rol en Nube: <strong style={{ color: role === 'Docentes' ? '#34d399' : '#60a5fa' }}>{role}</strong>
-        </p>
-        {userPayload && userPayload.email && (
-          <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-muted))', marginTop: '4px' }}>
-            Email: {userPayload.email}
-          </p>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+          <span style={{ color: 'hsl(var(--primary))', fontSize: '1.2rem' }}>✓</span>
+          <strong style={{ fontSize: '0.95rem', color: 'hsl(var(--primary))' }}>
+            Datos Recuperados de AWS Cognito (Persistido en Nube)
+          </strong>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 20px', fontSize: '0.85rem' }}>
+          <div>
+            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.75rem', textTransform: 'uppercase' }}>Nombre Completo</p>
+            <p style={{ fontWeight: 500, color: 'hsl(var(--text-primary))' }}>{userPayload?.name || 'Cargando...'}</p>
+          </div>
+          <div>
+            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.75rem', textTransform: 'uppercase' }}>Cédula de Identidad</p>
+            <p style={{ fontWeight: 500, color: 'hsl(var(--text-primary))' }}>{userPayload?.profile || 'Cargando...'}</p>
+          </div>
+          <div>
+            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.75rem', textTransform: 'uppercase' }}>Fecha de Nacimiento</p>
+            <p style={{ fontWeight: 500, color: 'hsl(var(--text-primary))' }}>{userPayload?.birthdate || 'Cargando...'}</p>
+          </div>
+          <div>
+            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.75rem', textTransform: 'uppercase' }}>Correo Electrónico</p>
+            <p style={{ fontWeight: 500, color: 'hsl(var(--text-primary))' }}>{userPayload?.email || 'Cargando...'}</p>
+          </div>
+          <div>
+            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.75rem', textTransform: 'uppercase' }}>Nombre de Usuario</p>
+            <p style={{ fontWeight: 500, color: 'hsl(var(--text-primary))' }}>{username}</p>
+          </div>
+          <div>
+            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.75rem', textTransform: 'uppercase' }}>Rol Asignado en Nube</p>
+            <strong style={{ color: role === 'Docentes' ? '#34d399' : '#60a5fa' }}>{role}</strong>
+          </div>
+        </div>
       </div>
 
       {/* Formulario de Solicitud de Plan */}
