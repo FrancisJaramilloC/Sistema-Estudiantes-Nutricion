@@ -6,12 +6,12 @@ Este documento sirve como el **Informe Técnico de Puesta en Marcha** y la **Gu�
 
 ## 1. Justificación Técnica de la Arquitectura en la Nube (AWS)
 
-La arquitectura propuesta está diseñada para ser resiliente, costo-eficiente y altamente escalable, aprovechando los siguientes pilares de cómputo en la nube de Amazon Web Services (AWS):
+La arquitectura propuesta está diseñada para ser resiliente, costo-eficiente y altamente accesible, aprovechando los siguientes pilares de cómputo en la nube de Amazon Web Services (AWS):
 
 ### A. Procesamiento (Cómputo)
-*   **AWS EC2 (Elastic Compute Cloud) / AWS ECS (Elastic Container Service) con Fargate:**
-    *   *Justificación:* Para la ejecución de la API construida en **FastAPI**, se seleccionó un enfoque de contenedores. Para despliegues educativos en AWS Academy, se propone una instancia **t2.micro** o **t3.micro** (elegible en la capa gratuita) configurada con Docker. En entornos de producción, el uso de **AWS ECS con Fargate (Serverless)** elimina la sobrecarga operativa de gestionar sistemas operativos y parches de seguridad, cobrando únicamente por el tiempo exacto de CPU y memoria consumido por el contenedor FastAPI.
-    *   *Virtualización y OS:* El microservicio se ejecuta en un contenedor Docker basado en **Debian Slim / Python 3.11**, optimizando el espacio en disco, reduciendo la superficie de ataque de seguridad y garantizando que la aplicación sea portable entre el entorno de desarrollo local y la nube de AWS.
+*   **AWS EC2 (Elastic Compute Cloud) + Docker Compose:**
+    *   *Justificación:* Para la ejecución de la API construida en **FastAPI**, se seleccionó un enfoque de contenedores ejecutados en una instancia virtual **t2.micro** (incluida en la capa gratuita y permitida en AWS Academy). Debido a las restricciones de los laboratorios estudiantiles (*sandboxes*), los servicios administrados de alto costo como AWS App Runner no están permitidos. Por ello, el uso de una instancia de EC2 configurada con Docker y Docker Compose representa la solución óptima y permitida, simulando un servidor de producción de nodo único.
+    *   *Virtualización y OS:* El microservicio se ejecuta en un contenedor Docker basado en **Debian Slim / Python 3.11** montado sobre un sistema operativo host **Ubuntu Server 22.04 LTS**. Esto garantiza el aislamiento del entorno de ejecución, optimiza el espacio de almacenamiento y elimina fallas por diferencias en dependencias.
 
 ### B. Almacenamiento (Base de Datos NoSQL)
 *   **AWS DynamoDB:**
@@ -24,12 +24,12 @@ La arquitectura propuesta está diseñada para ser resiliente, costo-eficiente y
 
 ### C. Redes y Seguridad (Networking)
 *   **VPC (Virtual Private Cloud) y Security Groups:**
-    *   *Justificación:* El contenedor de la API se despliega dentro de una subred pública para recibir tráfico HTTP del cliente. El tráfico está controlado por **Security Groups** que actúan como firewalls virtuales de estado, permitiendo únicamente conexiones entrantes por el puerto `80` (HTTP) y `443` (HTTPS) desde internet.
+    *   *Justificación:* La máquina virtual de EC2 se despliega dentro de una subred pública para recibir tráfico HTTP del cliente. El tráfico está controlado por **Security Groups** que actúan como firewalls virtuales de estado, permitiendo únicamente conexiones entrantes por el puerto `22` (para administración SSH), `80` (HTTP) y el puerto de la API `8000`.
     *   *Seguridad de Datos:* A diferencia de las bases de datos SQL tradicionales que requieren abrir puertos de red (como el 3306 de MySQL o 5432 de PostgreSQL), DynamoDB se expone a través de endpoints seguros HTTPS controlados mediante políticas de acceso de AWS **IAM (Identity and Access Management)**, eliminando la necesidad de exponer la base de datos a internet.
 
 ### D. DevOps e Infraestructura como Código (IaC)
 *   **Contenedores y Pipeline:**
-    *   *Justificación:* Todo el entorno local se configura mediante **Docker Compose**, lo que permite recrear el ambiente de nube localmente. Para producción, la integración de GitHub Actions permite empaquetar la imagen Docker y subirla a **AWS ECR (Elastic Container Registry)** para su posterior despliegue automatizado.
+    *   *Justificación:* Todo el entorno local se configura mediante **Docker Compose**, lo que permite recrear el ambiente de nube localmente. Para producción, se automatiza el despliegue en la instancia EC2 mediante GitHub Actions, permitiendo que cada push compile y actualice los contenedores automáticamente.
 
 ---
 
@@ -67,43 +67,40 @@ Existen dos métodos de conexión dependiendo de dónde ejecutes la aplicación:
 
 Si quieres correr el Docker en tu computadora local pero que guarde la información en tu base de datos de AWS real:
 
-1.  **Obtener las Credenciales de tu AWS Academy:**
-    *   En tu portal de AWS Academy, haz clic en **AWS Details**.
-    *   Verás una sección llamada **AWS CLI Credentials**. Copia los valores de:
-        *   `aws_access_key_id`
-        *   `aws_secret_access_key`
-        *   `aws_session_token` (las cuentas estudiantiles usan tokens temporales obligatoriamente).
+1.  **Obtener las Credenciales de tu Cuenta de AWS:**
+    *   En tu consola de AWS IAM, utiliza las claves de acceso de tu usuario administrador o copia las credenciales de tu laboratorio en el menú **AWS Details** -> **AWS CLI Credentials**.
 2.  **Configurar las Variables de Entorno en el archivo `.env`:**
     *   Crea un archivo llamado `.env` en la raíz de tu proyecto (este archivo está excluido en el `.gitignore` por seguridad).
-    *   Añade las credenciales de tu consola estudiantil:
+    *   Añade las credenciales de tu consola:
         ```env
-        AWS_DEFAULT_REGION=us-east-1
+        AWS_DEFAULT_REGION=us-east-2
         AWS_ACCESS_KEY_ID=TU_AWS_ACCESS_KEY_ID_REAL
         AWS_SECRET_ACCESS_KEY=TU_AWS_SECRET_ACCESS_KEY_REAL
-        AWS_SESSION_TOKEN=TU_AWS_SESSION_TOKEN_COMPLETO
+        AWS_SESSION_TOKEN=
+        COGNITO_USER_POOL_ID=us-east-2_XXXXXXXX
+        COGNITO_APP_CLIENT_ID=XXXXXXXXXXXXXXXXXXXXXXXXXX
+        DYNAMODB_ENDPOINT_URL=
         ```
-    *   *Nota Importante:* **NO** definas la variable `DYNAMODB_ENDPOINT_URL` en este archivo `.env`. Al no estar definida, la librería `boto3` sabrá que debe buscar la tabla `tasks` directamente en los servidores de AWS en internet, usando tus credenciales.
+    *   *Nota Importante:* Deja `DYNAMODB_ENDPOINT_URL` vacío. Al no estar definido, la librería `boto3` sabrá que debe buscar la tabla `tasks` directamente en los servidores de AWS en internet, usando tus credenciales.
 
 3.  **Ejecutar localmente:**
     *   Levanta tu contenedor:
         ```bash
-        sudo docker compose up --build
+        sudo docker compose up --build -d
         ```
     *   Haz una petición POST a tu API local. Verás en tu consola de AWS DynamoDB (sección *Explorar elementos de tabla*) cómo se registra la tarea directamente en la nube.
 
 ---
 
-### Método B: Ejecución Desplegada en AWS (EC2 / ECS Fargate - Producción)
+### Método B: Ejecución Desplegada en AWS (EC2 - Producción)
 
-Cuando subas tu contenedor API a una máquina virtual **EC2** o servicio de contenedores **ECS Fargate** en AWS:
+Cuando subas tu contenedor API a tu máquina virtual **EC2** en AWS:
 
 1.  **Seguridad por Roles (Sin contraseñas escritas):**
-    *   **NUNCA** debes escribir o guardar archivos con claves de acceso (`AWS_ACCESS_KEY_ID`) en servidores en la nube.
-    *   En su lugar, crea un **Rol de IAM** (IAM Role) con permisos para leer y escribir en DynamoDB (política `AmazonDynamoDBFullAccess` o una política personalizada restringida a la tabla `tasks`).
-2.  **Asociar el Rol al Servidor:**
-    *   Asocia este Rol de IAM al perfil de instancia de tu servidor EC2 o a la definición de tarea (Task Definition) en ECS Fargate.
-3.  **El código funciona automáticamente:**
-    *   Gracias al cambio estructural implementado en `get_dynamodb_resource()`, la librería `boto3` de Python detectará de manera automática el rol de la máquina de AWS y se autenticará de forma segura sin necesidad de configurar ninguna variable de credenciales en tu `.env` ni en el `docker-compose.yml`.
+    *   **NUNCA** debes escribir o guardar archivos con claves de acceso (`AWS_ACCESS_KEY_ID`) en servidores en la nube en entornos reales.
+    *   En su lugar, asocia un **Rol de IAM** a tu instancia EC2 que posea la política `AmazonDynamoDBFullAccess` y acceso a Cognito.
+2.  **El código funciona automáticamente:**
+    *   Gracias al diseño modular implementado en `api/database.py`, la librería `boto3` de Python detectará de manera automática el rol de la máquina de AWS y se autenticará de forma segura sin necesidad de configurar claves estáticas en el archivo `.env` del servidor.
 
 ---
 
@@ -115,7 +112,7 @@ Cuando subas tu contenedor API a una máquina virtual **EC2** o servicio de cont
 En sistemas de procesamiento nutricional y clínico, la información manipulada entra en la categoría de **datos de salud altamente sensibles**. Delegar el manejo de identidades y accesos a un desarrollo local en base de datos presenta riesgos críticos de seguridad y cumplimiento legal (normativas HIPAA, RGPD, y leyes locales de derechos de los pacientes). 
 
 Se justifica la adopción de **AWS Cognito** en lugar de una solución propia basada en base de datos local por las siguientes razones:
-1.  **Seguridad de Contraseñas Avanzada:** Cognito implementa el protocolo **SRP (Secure Remote Password)**, lo que significa que las contraseñas nunca viajan por la red.
+1.  **Seguridad de Contraseñas Avanzada:** Cognito implementa el protocolo **SRP (Secure Remote Password)**, lo que significa que las contraseñas nunca viajan por la red de forma legible.
 2.  **Cumplimiento de Estándares Internacionales:** AWS Cognito está certificado para cumplir con HIPAA, SOC 1/2/3, ISO 27001, lo cual garantiza de fábrica la encriptación de datos en tránsito y en reposo.
 3.  **Características Out-of-the-Box:** Soporta de forma nativa autenticación multifactor (MFA), políticas de complejidad de contraseñas, detección de credenciales comprometidas y bloqueo de cuentas por ataques de fuerza bruta, características complejas y costosas de programar desde cero.
 
@@ -125,7 +122,7 @@ Para controlar el acceso y los privilegios dentro de la plataforma del TFA, se d
 *   **Docentes:** Usuarios administradores. Tienen todos los accesos del estudiante, además de endpoints exclusivos como la auditoría completa de los planes creados en el sistema (`GET /admin/tasks`), lo cual les permite evaluar y monitorear el desempeño de todos los estudiantes.
 
 #### C. Flujo de Autenticación mediante Tokens JWT
-El sistema implementa un flujo de autenticación moderno e inalámbrico basado en **OAuth 2.0 / OpenID Connect (OIDC)**:
+El sistema implementa un flujo de autenticación moderno basado en **OAuth 2.0 / OpenID Connect (OIDC)**:
 1.  **Inicio de Sesión:** El cliente envía sus credenciales (usuario y contraseña) directamente al endpoint de autenticación de AWS Cognito.
 2.  **Entrega de Tokens:** Tras validar las credenciales, Cognito responde con tres tokens estándar **JWT (JSON Web Tokens)**:
     *   `IdToken`: Contiene la identidad verificada del usuario (nombre, correo) y el listado de grupos al que pertenece (`cognito:groups`).
@@ -139,34 +136,33 @@ El sistema implementa un flujo de autenticación moderno e inalámbrico basado e
 
 ---
 
-### 4.2. Estrategia de Contenedores y DevOps (Docker + AWS App Runner)
+### 4.2. Estrategia de Contenedores y DevOps (Docker + AWS EC2)
 
 #### A. Adopción de Contenedores (Docker)
-Para garantizar la **portabilidad y consistencia** del sistema, se adoptó Docker para empaquetar el microservicio del backend.
+Para garantizar la **portabilidad y consistencia** del sistema, se adoptó Docker para empaquetar el microservicio del backend y del frontend.
 *   **Aislamiento:** El contenedor encapsula todas las dependencias del sistema operativo (Python 3.11, librerías como Boto3 y FastAPI, herramientas criptográficas). Esto elimina por completo el clásico problema *"funciona en mi máquina local pero no en el servidor"*.
 *   **Eficiencia:** El backend utiliza imágenes basadas en distribuciones ligeras (Debian Slim), minimizando el consumo de recursos de almacenamiento en la nube y acelerando el tiempo de arranque.
 
-#### B. Pipeline de Automatización (DevOps) con AWS App Runner
-Para el despliegue automático y continuo, se utiliza **AWS App Runner**, un servicio totalmente administrado de AWS que simplifica el ciclo de vida de los contenedores sin necesidad de configurar balanceadores de carga, VPCs complejas o clústeres de Kubernetes (ECS/EKS).
+#### B. Pipeline de Automatización (DevOps) con GitHub Actions y AWS EC2
+Para el despliegue automático y continuo dentro de las limitaciones de AWS Academy, se utiliza un pipeline de integración y entrega continua (CI/CD) basado en **GitHub Actions** conectado por SSH a la instancia de **AWS EC2**.
 
-El flujo de despliegue automatizado (**CI/CD**) funciona bajo el siguiente modelo:
+El flujo de despliegue automatizado funciona bajo el siguiente modelo:
 
 ```mermaid
-graph LR
+graph TD
     Dev[Desarrollador] -->|Git Push| GitHub[Repositorio GitHub]
-    GitHub -->|Webhook Trigger| AppRunner[AWS App Runner]
-    AppRunner -->|1. Build Container| DockerImage[Construye Imagen Docker]
-    AppRunner -->|2. Blue/Green Deploy| RunningApp[Nueva Versión en Línea]
+    GitHub -->|Trigger Workflow| Actions[GitHub Actions Runner]
+    Actions -->|1. Test & Linter| Actions
+    Actions -->|2. SSH Connection| EC2[AWS EC2 Instance]
+    EC2 -->|3. Git Pull| EC2
+    EC2 -->|4. Docker Compose Rebuild| RunningApp[API Contenedorizada Activa]
 ```
 
-1.  **Integración Continua (GitHub Link):**
-    *   AWS App Runner se conecta directamente al repositorio de GitHub mediante autenticación segura.
-    *   Se configura un disparador automático (trigger) para que cada `git push` a la rama principal (`main`) active el flujo.
-2.  **Construcción Automática:**
-    *   Al detectar el commit, App Runner descarga el código, lee la configuración del contenedor (a través de la definición de construcción) y compila la imagen Docker de forma transparente.
-3.  **Despliegue Continuo sin Interrupciones (Zero-Downtime Deployment):**
-    *   App Runner utiliza una estrategia de despliegue **Blue/Green**.
-    *   Primero levanta los contenedores con la *nueva versión* y realiza pruebas de salud (*health checks*).
-    *   Una vez que los nuevos contenedores responden correctamente, redirige progresivamente el tráfico de red de los usuarios hacia ellos.
-    *   Finalmente, destruye los contenedores antiguos. Esto garantiza que la plataforma del TFA nunca se caiga ni experimente interrupciones de servicio durante las actualizaciones.
-
+1.  **Integración Continua (CI):**
+    *   El desarrollador sube los cambios al repositorio de GitHub. Un flujo de GitHub Actions valida el código mediante pruebas unitarias y análisis de estilo (*linters*).
+2.  **Entrega Continua (CD):**
+    *   Una vez que las pruebas pasan exitosamente, la tarea de GitHub Actions inicia una conexión SSH segura (utilizando llaves criptográficas privadas) con la máquina virtual de AWS EC2.
+3.  **Despliegue sin Interrupción en el Host:**
+    *   El runner ejecuta comandos dentro del servidor EC2 para descargar el código más reciente (`git pull`).
+    *   Posteriormente, ejecuta `docker compose up --build -d` para reconstruir la imagen Docker únicamente con los cambios recibidos y reiniciar el contenedor de la API en segundo plano.
+    *   Esto permite automatizar por completo el despliegue, logrando actualizaciones veloces en cuestión de segundos y garantizando que el servicio web esté en línea continuamente para los usuarios.

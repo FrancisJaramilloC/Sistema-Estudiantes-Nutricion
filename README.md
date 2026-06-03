@@ -137,8 +137,19 @@ Un listado con todas las tareas registradas en la base de datos de DynamoDB.
 .
 ├── api/
 │   ├── Dockerfile
-│   └── main.py          # Backend (FastAPI + Boto3 + BackgroundTasks)
-├── docker-compose.yml   # Orquestación (API + DynamoDB local)
-├── requirements.txt     # Dependencias de Python (FastAPI, boto3, etc.)
-└── .gitignore           # Archivos omitidos en Git
+│   ├── main.py          # Entrada de la API FastAPI
+│   ├── config.py        # Carga centralizada de variables de entorno
+│   ├── database.py      # Inicializador y utilidades de DynamoDB
+│   ├── models.py        # Esquemas de datos de Pydantic
+│   ├── auth.py          # Verificación JWT de Cognito y RBAC
+│   ├── tasks.py         # Lógica de tareas asíncronas en segundo plano
+│   └── routers/         # Enrutadores modulares de la aplicación
+│       ├── __init__.py
+│       ├── health.py    # Health check
+│       ├── plans.py     # Creación y consulta de planes nutricionales
+│       └── admin.py     # Auditoría de tareas para docentes
+├── docker-compose.yml   # Orquestación de servicios locales
+├── requirements.txt     # Dependencias de Python
+├── .env                 # Variables de entorno y credenciales (excluido en git)
+└── .gitignore           # Archivos ignorados en control de versiones
 ```
