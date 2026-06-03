@@ -215,7 +215,7 @@ export default function Dashboard({ token, username, onLogout }) {
                   borderRadius: '8px', 
                   padding: '10px 12px',
                   display: 'flex',
-                  justify-content: 'space-between',
+                  justifyContent: 'space-between',
                   alignItems: 'center'
                 }}>
                   <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '8px' }}>
