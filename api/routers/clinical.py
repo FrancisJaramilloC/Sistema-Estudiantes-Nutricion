@@ -27,7 +27,7 @@ class ClinicalCalculateResponse(BaseModel):
 @router.post("/api/v1/clinical/calculate", response_model=ClinicalCalculateResponse)
 async def calculate_clinical(
     req: ClinicalCalculateRequest,
-    user: dict = Depends(require_role(["Estudiantes"]))
+    user: dict = Depends(require_role(["Estudiantes", "Docentes"]))
 ):
     """
     Endpoint síncrono del Motor Antropométrico protegido por rol.

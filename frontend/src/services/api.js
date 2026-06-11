@@ -115,5 +115,26 @@ export const apiService = {
       throw new Error(data.detail || 'Error al realizar el cálculo antropométrico');
     }
     return data;
+  },
+
+  /**
+   * Obtiene el estado actual de una tarea de plan nutricional por su ID
+   * @param {string} token 
+   * @param {string} taskId 
+   */
+  getTaskStatus: async (token, taskId) => {
+    const url = `${getBaseUrl()}/tasks/${taskId}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al obtener estado de la tarea');
+    }
+    return data;
   }
 };

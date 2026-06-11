@@ -23,6 +23,7 @@ async def create_plan(
         "task_id": task_id,
         "paciente_id": plan.paciente_id,
         "tipo_plan": plan.tipo_plan,
+        "alimentos": [a.dict() for a in plan.alimentos] if plan.alimentos else [],
         "estado_actual": "PENDIENTE",
         "created_at": datetime.utcnow().isoformat(),
         "updated_at": datetime.utcnow().isoformat(),

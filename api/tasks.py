@@ -2,7 +2,7 @@ import time
 from datetime import datetime
 from database import get_or_create_table
 
-def process_plan_task(task_id: str, paciente_id: int, tipo_plan: str):
+def process_plan_task(task_id: str, paciente_id: str, tipo_plan: str):
     """
     Simulación del procesamiento asíncrono en segundo plano (RF10).
     """
