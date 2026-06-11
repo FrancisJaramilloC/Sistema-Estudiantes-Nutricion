@@ -21,6 +21,7 @@ class RegisterRequest(BaseModel):
     nombre: str
     cedula: str
     fecha_nacimiento: str
+    admin_key: str = None
 
 class LoginRequest(BaseModel):
     username: str
@@ -42,15 +43,39 @@ def is_local_mode():
 
 @router.post("/register")
 def register(req: RegisterRequest):
+    # Validar acceso a rol de Docente
+    if req.role == UserRole.DOCENTES:
+        if not req.admin_key or req.admin_key != "Docente2026!":
+            raise HTTPException(
+                status_code=400,
+                detail="Clave de docente incorrecta o no proporcionada. No tiene permisos para registrarse como Docente."
+            )
+
     if is_local_mode():
         try:
             db = get_dynamodb_resource()
             table = db.Table("users_table")
             
-            # Verificar si ya existe
+            # 1. Verificar si el username ya existe
             response = table.get_item(Key={"username": req.username})
             if "Item" in response:
-                raise HTTPException(status_code=400, detail=f"El usuario '{req.username}' ya existe.")
+                raise HTTPException(status_code=400, detail=f"El nombre de usuario '{req.username}' ya está registrado.")
+                
+            # 2. Verificar si el email ya existe
+            response_email = table.scan(
+                FilterExpression="email = :email",
+                ExpressionAttributeValues={":email": req.email}
+            )
+            if response_email.get("Items"):
+                raise HTTPException(status_code=400, detail=f"El correo electrónico '{req.email}' ya está registrado.")
+
+            # 3. Verificar si la cédula ya existe
+            response_cedula = table.scan(
+                FilterExpression="cedula = :cedula",
+                ExpressionAttributeValues={":cedula": req.cedula}
+            )
+            if response_cedula.get("Items"):
+                raise HTTPException(status_code=400, detail=f"La cédula '{req.cedula}' ya está registrada.")
                 
             # Almacenar en DynamoDB local
             table.put_item(Item={

@@ -11,8 +11,34 @@ function App() {
     const savedToken = localStorage.getItem('nutria_token');
     const savedUser = localStorage.getItem('nutria_username');
     if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUsername(savedUser);
+      try {
+        const base64Url = savedToken.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+          window.atob(base64)
+            .split('')
+            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join('')
+        );
+        const payload = JSON.parse(jsonPayload);
+        const currentTime = Math.floor(Date.now() / 1000);
+        if (payload.exp && payload.exp < currentTime) {
+          // Token expirado, limpiar almacenamiento local
+          localStorage.removeItem('nutria_token');
+          localStorage.removeItem('nutria_username');
+          setToken(null);
+          setUsername('');
+        } else {
+          setToken(savedToken);
+          setUsername(savedUser);
+        }
+      } catch (e) {
+        console.error("Token no válido o expirado:", e);
+        localStorage.removeItem('nutria_token');
+        localStorage.removeItem('nutria_username');
+        setToken(null);
+        setUsername('');
+      }
     }
   }, []);
 
