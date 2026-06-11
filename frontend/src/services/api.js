@@ -13,7 +13,7 @@ export const apiService = {
    * @param {string} role "Estudiantes" o "Docentes"
    */
   register: async (username, email, password, role, nombre, cedula, fecha_nacimiento) => {
-    const url = `${getBaseUrl()}/auth/register`;
+    const url = `${getBaseUrl()}/api/v1/auth/register`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -35,7 +35,7 @@ export const apiService = {
    * @param {string} password 
    */
   login: async (username, password) => {
-    const url = `${getBaseUrl()}/auth/login`;
+    const url = `${getBaseUrl()}/api/v1/auth/login`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -56,7 +56,7 @@ export const apiService = {
    * @param {string} token Token JWT
    */
   getAdminTasks: async (token) => {
-    const url = `${getBaseUrl()}/admin/tasks`;
+    const url = `${getBaseUrl()}/api/v1/admin/tasks`;
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -77,7 +77,7 @@ export const apiService = {
    * @param {object} planData 
    */
   createPlan: async (token, planData) => {
-    const url = `${getBaseUrl()}/plan`;
+    const url = `${getBaseUrl()}/api/v1/plan`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -123,7 +123,7 @@ export const apiService = {
    * @param {string} taskId 
    */
   getTaskStatus: async (token, taskId) => {
-    const url = `${getBaseUrl()}/tasks/${taskId}`;
+    const url = `${getBaseUrl()}/api/v1/tasks/${taskId}`;
     const response = await fetch(url, {
       method: 'GET',
       headers: {

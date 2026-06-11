@@ -117,6 +117,7 @@ label {
 }
 
 input, select {
+  width: 100%;
   background: #fdfdfc;
   border: 1px solid hsl(var(--card-border));
   border-radius: 12px;

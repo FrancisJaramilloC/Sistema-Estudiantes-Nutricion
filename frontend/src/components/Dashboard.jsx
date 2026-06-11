@@ -328,6 +328,28 @@ export default function Dashboard({ token, username, onLogout }) {
             >
               <span>⚖️</span> Antropometría
             </button>
+
+            <button 
+              onClick={() => setActiveTab('plan')}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                width: '100%',
+                padding: '12px 16px',
+                border: 'none',
+                borderRadius: '12px',
+                background: activeTab === 'plan' ? 'rgba(30, 63, 32, 0.08)' : 'transparent',
+                color: activeTab === 'plan' ? 'hsl(var(--primary))' : 'hsl(var(--text-secondary))',
+                fontWeight: 600,
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+                textAlign: 'left',
+                transition: 'all 0.2s ease'
+              }}
+            >
+              <span>🍎</span> Plan Nutricional
+            </button>
           </div>
         </div>
 
@@ -349,413 +371,446 @@ export default function Dashboard({ token, username, onLogout }) {
         maxHeight: '85vh'
       }} className="dashboard-main-content">
 
-        {activeTab === 'antropometria' ? (
+        {activeTab === 'antropometria' && (
           <AntropometriaForm token={token} />
-        ) : (
-          /* TAB 1: INICIO (DASHBOARD PRINCIPAL) */
+        )}
+
+        {activeTab === 'inicio' && (
+          /* TAB 1: INICIO (DASHBOARD PRINCIPAL - PERFIL Y AUDITORÍA) */
           <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <h1 style={{ fontSize: '2rem', textAlign: 'left', margin: 0 }}>Panel de Control NutriA</h1>
               <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.95rem' }}>
-                Genera planes nutricionales personalizados para tus pacientes y gestiona tu información de perfil de forma segura.
+                Gestiona tu información de perfil de forma segura y accede a los reportes de auditoría.
               </p>
             </div>
 
             {/* Side-by-side or stacked grid depending on role */}
             <div style={{ 
               display: 'grid', 
-              gridTemplateColumns: role === 'Docentes' ? '1fr 1fr' : '1.2fr 0.8fr', 
+              gridTemplateColumns: role === 'Docentes' ? '1.2fr 0.8fr' : '1fr', 
               gap: '24px',
               alignItems: 'start'
             }} className="dashboard-grid">
               
-              {/* Left Side: Profile Card & Plan Request */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                
-                {/* 2a. USER PROFILE CARD WITH PRIVACY TOGGLE */}
+              {/* Left Side: Profile Card */}
+              <div className="card" style={{ padding: '24px', margin: 0, width: '100%', borderRadius: '20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(30, 63, 32, 0.08)', paddingBottom: '8px' }}>
+                  <h2 style={{ fontSize: '1.2rem', textAlign: 'left', margin: 0, border: 'none', padding: 0 }}>
+                    Información del Usuario
+                  </h2>
+                  <button 
+                    onClick={() => setShowSensitiveData(!showSensitiveData)}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid hsl(var(--card-border))',
+                      borderRadius: '20px',
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      color: 'hsl(var(--text-secondary))',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    {showSensitiveData ? '🙈 Ocultar Datos' : '👁️ Mostrar Datos'}
+                  </button>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', fontSize: '0.85rem' }}>
+                  <div>
+                    <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.72rem', textTransform: 'uppercase', marginBottom: '2px' }}>Nombre Completo</p>
+                    <p style={{ fontWeight: 600, color: 'hsl(var(--text-primary))', margin: 0 }}>
+                      {maskText(userPayload?.name, 'name')}
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.72rem', textTransform: 'uppercase', marginBottom: '2px' }}>Cédula de Identidad</p>
+                    <p style={{ fontWeight: 600, color: 'hsl(var(--text-primary))', margin: 0 }}>
+                      {maskText(userPayload?.profile, 'cedula')}
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.72rem', textTransform: 'uppercase', marginBottom: '2px' }}>Fecha de Nacimiento</p>
+                    <p style={{ fontWeight: 600, color: 'hsl(var(--text-primary))', margin: 0 }}>
+                      {maskText(userPayload?.birthdate, 'birthdate')}
+                    </p>
+                  </div>
+                  <div>
+                    <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.72rem', textTransform: 'uppercase', marginBottom: '2px' }}>Correo Electrónico</p>
+                    <p style={{ fontWeight: 600, color: 'hsl(var(--text-primary))', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {maskText(userPayload?.email, 'email')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Side: Teacher Audit Log */}
+              {role === 'Docentes' && (
                 <div className="card" style={{ padding: '24px', margin: 0, width: '100%', borderRadius: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(30, 63, 32, 0.08)', paddingBottom: '8px' }}>
                     <h2 style={{ fontSize: '1.2rem', textAlign: 'left', margin: 0, border: 'none', padding: 0 }}>
-                      Información del Usuario
+                      Auditoría de Planes (DynamoDB)
                     </h2>
                     <button 
-                      onClick={() => setShowSensitiveData(!showSensitiveData)}
-                      style={{
-                        background: 'transparent',
-                        border: '1px solid hsl(var(--card-border))',
-                        borderRadius: '20px',
-                        padding: '4px 10px',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        color: 'hsl(var(--text-secondary))',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
+                      onClick={loadAuditTasks} 
+                      className="btn btn-secondary" 
+                      style={{ width: 'auto', marginTop: 0, padding: '4px 10px', fontSize: '0.8rem' }}
+                      disabled={auditLoading}
                     >
-                      {showSensitiveData ? '🙈 Ocultar Datos' : '👁️ Mostrar Datos'}
+                      Refrescar
                     </button>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 20px', fontSize: '0.85rem' }}>
-                    <div>
-                      <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.72rem', textTransform: 'uppercase', marginBottom: '2px' }}>Nombre Completo</p>
-                      <p style={{ fontWeight: 600, color: 'hsl(var(--text-primary))', margin: 0 }}>
-                        {maskText(userPayload?.name, 'name')}
-                      </p>
-                    </div>
-                    <div>
-                      <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.72rem', textTransform: 'uppercase', marginBottom: '2px' }}>Cédula de Identidad</p>
-                      <p style={{ fontWeight: 600, color: 'hsl(var(--text-primary))', margin: 0 }}>
-                        {maskText(userPayload?.profile, 'cedula')}
-                      </p>
-                    </div>
-                    <div>
-                      <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.72rem', textTransform: 'uppercase', marginBottom: '2px' }}>Fecha de Nacimiento</p>
-                      <p style={{ fontWeight: 600, color: 'hsl(var(--text-primary))', margin: 0 }}>
-                        {maskText(userPayload?.birthdate, 'birthdate')}
-                      </p>
-                    </div>
-                    <div>
-                      <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.72rem', textTransform: 'uppercase', marginBottom: '2px' }}>Correo Electrónico</p>
-                      <p style={{ fontWeight: 600, color: 'hsl(var(--text-primary))', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {maskText(userPayload?.email, 'email')}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                  {auditError && <div className="error-msg">{auditError}</div>}
 
-                {/* 2b. GENERAR PLAN NUTRICIONAL CARD WITH FOOD BUILDER */}
-                <div className="card" style={{ padding: '24px', margin: 0, width: '100%', borderRadius: '20px' }}>
-                  <h2 style={{ fontSize: '1.2rem', textAlign: 'left', marginBottom: '16px', borderBottom: '1px solid rgba(30, 63, 32, 0.08)', paddingBottom: '8px' }}>
-                    Generar Plan Nutricional
-                  </h2>
-
-                  {planError && <div className="error-msg">{planError}</div>}
-                  {planResult && <div className="success-msg">{planResult}</div>}
-                  
-                  <form onSubmit={handleRequestPlan} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label htmlFor="pacienteId">Identificación Paciente</label>
-                        <input 
-                          type="text" 
-                          id="pacienteId"
-                          value={pacienteId}
-                          onChange={(e) => setPacienteId(e.target.value)}
-                          placeholder="ej. PAC-983"
-                          disabled={planLoading}
-                          required
-                        />
-                      </div>
-
-                      <div className="form-group" style={{ marginBottom: 0 }}>
-                        <label htmlFor="tipoPlan">Tipo de Plan</label>
-                        <select 
-                          id="tipoPlan"
-                          value={tipoPlan}
-                          onChange={(e) => setTipoPlan(e.target.value)}
-                          disabled={planLoading}
-                          required
+                  {auditLoading ? (
+                    <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
+                      <div className="spinner" style={{ borderColor: 'rgba(30,63,32,0.1)', borderTopColor: 'hsl(var(--primary))' }}></div>
+                    </div>
+                  ) : tasks.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: 'hsl(var(--text-muted))', padding: '16px 0' }}>
+                      No hay tareas registradas en la base de datos.
+                    </p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
+                      {tasks.map((task) => (
+                        <div 
+                          key={task.task_id} 
+                          onClick={() => setSelectedTask(selectedTask?.task_id === task.task_id ? null : task)}
+                          style={{ 
+                            background: 'rgba(30, 63, 32, 0.02)', 
+                            border: '1px solid hsl(var(--card-border))', 
+                            borderRadius: '8px', 
+                            padding: '10px 12px',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            borderColor: selectedTask?.task_id === task.task_id ? 'hsl(var(--primary))' : 'hsl(var(--card-border))'
+                          }}
                         >
-                          <option value="Balanceado">Balanceado</option>
-                          <option value="Keto (Cetogénico)">Keto (Cetogénico)</option>
-                          <option value="Vegano">Vegano</option>
-                          <option value="Hiperproteico">Hiperproteico</option>
-                        </select>
-                      </div>
-                    </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div>
+                              <p style={{ fontSize: '0.8rem', fontWeight: 600, margin: 0 }}>Paciente: {task.paciente_id || 'N/A'}</p>
+                              <p style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', marginTop: '2px', margin: 0 }}>
+                                ID: {task.task_id.substring(0, 8)}... ({task.tipo_plan})
+                              </p>
+                            </div>
+                            <span style={{ 
+                              fontSize: '0.72rem', 
+                              fontWeight: 700, 
+                              padding: '2px 8px', 
+                              borderRadius: '12px',
+                              background: task.status === 'COMPLETADO' ? '#ecfdf5' : '#fff7ed',
+                              color: task.status === 'COMPLETADO' ? '#047857' : '#c2410c'
+                            }}>
+                              {task.status}
+                            </span>
+                          </div>
 
-                    {/* FOOD BUILDER SUBFORM */}
-                    <div style={{ 
-                      background: 'rgba(30, 63, 32, 0.02)',
-                      border: '1px solid hsl(var(--card-border))',
-                      borderRadius: '12px',
-                      padding: '16px',
-                      marginTop: '8px'
-                    }}>
-                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                        Añadir Alimentos al Menú
-                      </span>
-
-                      {/* Quick-Add Chips */}
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', margin: '12px 0 16px 0' }}>
-                        {quickAddFoods.map((qFood, idx) => (
-                          <button
-                            key={idx}
-                            type="button"
-                            onClick={() => handleQuickAdd(qFood)}
-                            disabled={planLoading}
-                            style={{
-                              background: '#ffffff',
-                              border: '1px solid hsl(var(--card-border))',
-                              borderRadius: '20px',
-                              padding: '4px 10px',
-                              fontSize: '0.72rem',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '4px',
-                              color: 'hsl(var(--text-primary))',
-                              transition: 'all 0.15s ease'
-                            }}
-                            onMouseOver={(e) => e.currentTarget.style.borderColor = 'hsl(var(--primary))'}
-                            onMouseOut={(e) => e.currentTarget.style.borderColor = 'hsl(var(--card-border))'}
-                          >
-                            <span>{qFood.icon}</span> {qFood.nombre} ({qFood.cantidad})
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* Custom Food Row Input */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr 1fr', gap: '10px', alignItems: 'end' }}>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label style={{ fontSize: '0.7rem' }}>Nombre Alimento</label>
-                          <input
-                            type="text"
-                            value={foodName}
-                            onChange={(e) => setFoodName(e.target.value)}
-                            placeholder="ej. Filete de Pescado"
-                            disabled={planLoading}
-                            style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                          />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label style={{ fontSize: '0.7rem' }}>Porción/Cant.</label>
-                          <input
-                            type="text"
-                            value={foodQty}
-                            onChange={(e) => setFoodQty(e.target.value)}
-                            placeholder="ej. 150g"
-                            disabled={planLoading}
-                            style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                          />
-                        </div>
-                        <div className="form-group" style={{ marginBottom: 0 }}>
-                          <label style={{ fontSize: '0.7rem' }}>Momento Comida</label>
-                          <select
-                            value={foodMeal}
-                            onChange={(e) => setFoodMeal(e.target.value)}
-                            disabled={planLoading}
-                            style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                          >
-                            <option value="Desayuno">Desayuno</option>
-                            <option value="Almuerzo">Almuerzo</option>
-                            <option value="Cena">Cena</option>
-                            <option value="Colación">Colación</option>
-                          </select>
-                        </div>
-                      </div>
-                      
-                      <button 
-                        type="button" 
-                        onClick={handleAddFood} 
-                        className="btn btn-secondary" 
-                        disabled={planLoading}
-                        style={{ marginTop: '12px', padding: '8px 12px', fontSize: '0.8rem', width: 'auto' }}
-                      >
-                        + Agregar a la Lista
-                      </button>
-
-                      {/* List of current foods */}
-                      {alimentos.length > 0 && (
-                        <div style={{ marginTop: '16px', maxHeight: '160px', overflowY: 'auto', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '12px' }}>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
-                            <thead>
-                              <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
-                                <th style={{ padding: '6px', color: 'hsl(var(--text-muted))' }}>Alimento</th>
-                                <th style={{ padding: '6px', color: 'hsl(var(--text-muted))' }}>Cantidad</th>
-                                <th style={{ padding: '6px', color: 'hsl(var(--text-muted))' }}>Comida</th>
-                                <th style={{ padding: '6px', textAlign: 'center' }} />
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {alimentos.map((item, idx) => (
-                                <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
-                                  <td style={{ padding: '6px', fontWeight: 500 }}>{item.nombre}</td>
-                                  <td style={{ padding: '6px' }}>{item.cantidad}</td>
-                                  <td style={{ padding: '6px' }}>
-                                    <span style={{
-                                      fontSize: '0.7rem',
-                                      padding: '2px 6px',
-                                      borderRadius: '8px',
-                                      background: item.comida === 'Desayuno' ? '#eff6ff' : item.comida === 'Almuerzo' ? '#ecfdf5' : item.comida === 'Cena' ? '#f5f3ff' : '#fff7ed',
-                                      color: item.comida === 'Desayuno' ? '#1d4ed8' : item.comida === 'Almuerzo' ? '#047857' : item.comida === 'Cena' ? '#6d28d9' : '#c2410c'
-                                    }}>
-                                      {item.comida}
-                                    </span>
-                                  </td>
-                                  <td style={{ padding: '6px', textAlign: 'center' }}>
-                                    <button 
-                                      type="button" 
-                                      onClick={() => handleRemoveFood(idx)}
-                                      style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem' }}
-                                      title="Quitar"
-                                    >
-                                      ✕
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-
-                    <button type="submit" className="btn" disabled={planLoading || alimentos.length === 0} style={{ marginTop: '8px' }}>
-                      {planLoading ? <div className="spinner"></div> : `Solicitar Plan (${alimentos.length} alimentos)`}
-                    </button>
-                  </form>
-                </div>
-
-              </div>
-
-              {/* Right Side: Generated Plan Report OR Teacher Audit Log */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                
-                {/* 2c. DISPLAY REPORT OF LAST COMPLETED PLAN */}
-                {lastCreatedPlan && (
-                  <div className="card" style={{ padding: '24px', margin: 0, width: '100%', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.25)', background: 'rgba(16, 185, 129, 0.01)', animation: 'fadeIn 0.3s ease-out' }}>
-                    <h2 style={{ fontSize: '1.2rem', textAlign: 'left', marginBottom: '14px', borderBottom: '1px solid rgba(30, 63, 32, 0.08)', paddingBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span>Reporte Plan Nutricional</span>
-                      <span style={{
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        padding: '2px 8px',
-                        borderRadius: '12px',
-                        background: lastCreatedPlan.estado_actual === 'COMPLETADO' ? '#ecfdf5' : '#fff7ed',
-                        color: lastCreatedPlan.estado_actual === 'COMPLETADO' ? '#047857' : '#c2410c'
-                      }}>
-                        {lastCreatedPlan.estado_actual}
-                      </span>
-                    </h2>
-
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.85rem' }}>
-                      <p style={{ margin: 0 }}><strong>ID Paciente:</strong> {lastCreatedPlan.paciente_id}</p>
-                      <p style={{ margin: 0 }}><strong>Tipo de Dieta:</strong> {lastCreatedPlan.tipo_plan}</p>
-                      
-                      {lastCreatedPlan.alimentos && lastCreatedPlan.alimentos.length > 0 ? (
-                        <div style={{ marginTop: '8px' }}>
-                          <strong style={{ display: 'block', marginBottom: '6px' }}>Menú Estructurado:</strong>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                            {['Desayuno', 'Almuerzo', 'Cena', 'Colación'].map((meal) => {
-                              const mealFoods = lastCreatedPlan.alimentos.filter(f => f.comida === meal);
-                              if (mealFoods.length === 0) return null;
-                              return (
-                                <div key={meal} style={{ borderLeft: '3px solid hsl(var(--primary))', paddingLeft: '8px', margin: '4px 0' }}>
-                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'hsl(var(--primary))', textTransform: 'uppercase' }}>{meal}</span>
-                                  <ul style={{ paddingLeft: '14px', margin: '2px 0 0 0', color: 'hsl(var(--text-primary))' }}>
-                                    {mealFoods.map((f, i) => (
-                                      <li key={i}>{f.nombre} ({f.cantidad})</li>
+                          {/* Expanded details */}
+                          {selectedTask?.task_id === task.task_id && (
+                            <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(0,0,0,0.05)', fontSize: '0.75rem', color: 'hsl(var(--text-secondary))', animation: 'fadeIn 0.2s ease-out' }}>
+                              <p style={{ margin: '2px 0' }}><strong>Creado:</strong> {task.created_at || 'N/A'}</p>
+                              {task.alimentos && task.alimentos.length > 0 ? (
+                                <div style={{ marginTop: '6px' }}>
+                                  <strong>Alimentos en el Menú:</strong>
+                                  <ul style={{ paddingLeft: '14px', margin: '2px 0 0 0' }}>
+                                    {task.alimentos.map((al, idx) => (
+                                      <li key={idx}>{al.nombre} ({al.cantidad}) - {al.comida}</li>
                                     ))}
                                   </ul>
                                 </div>
-                              );
-                            })}
-                          </div>
+                              ) : (
+                                <p style={{ margin: '4px 0', color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>Sin alimentos asociados.</p>
+                              )}
+                            </div>
+                          )}
                         </div>
-                      ) : (
-                        <p style={{ color: 'hsl(var(--text-muted))', fontStyle: 'italic', margin: 0 }}>No se cargaron alimentos para este plan.</p>
-                      )}
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* DEVELOPER TOOLS COLLAPSIBLE PANEL */}
+            <details style={{ 
+              background: '#fdfdfc',
+              border: '1px solid hsl(var(--card-border))',
+              borderRadius: '12px',
+              padding: '12px',
+              cursor: 'pointer',
+              marginTop: '16px'
+            }}>
+              <summary style={{ fontSize: '0.8rem', fontWeight: 600, color: 'hsl(var(--text-secondary))', userSelect: 'none' }}>
+                🛠️ Herramientas de Desarrollador
+              </summary>
+              <div style={{ marginTop: '12px', cursor: 'default' }} onClick={(e) => e.stopPropagation()}>
+                <p style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', margin: '0 0 8px 0' }}>
+                  Token JWT activo para pruebas en Swagger / Postman:
+                </p>
+                <div className="token-container" style={{ margin: 0 }}>{token}</div>
+              </div>
+            </details>
+
+          </div>
+        )}
+
+        {activeTab === 'plan' && (
+          /* TAB 3: PLAN NUTRICIONAL (FORMULARIO Y FOOD BUILDER) */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <h1 style={{ fontSize: '2rem', textAlign: 'left', margin: 0 }}>Generación de Plan Nutricional</h1>
+              <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.95rem' }}>
+                Solicita y calcula planes alimenticios personalizados en segundo plano ingresando la identificación del paciente y detallando su menú diario.
+              </p>
+            </div>
+
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: lastCreatedPlan ? '1.2fr 0.8fr' : '1fr', 
+              gap: '24px',
+              alignItems: 'start'
+            }} className="dashboard-grid">
+              
+              {/* Left Side: Generar Plan Card */}
+              <div className="card" style={{ padding: '24px', margin: 0, width: '100%', borderRadius: '20px' }}>
+                <h2 style={{ fontSize: '1.2rem', textAlign: 'left', marginBottom: '16px', borderBottom: '1px solid rgba(30, 63, 32, 0.08)', paddingBottom: '8px' }}>
+                  Generar Plan Nutricional
+                </h2>
+
+                {planError && <div className="error-msg">{planError}</div>}
+                {planResult && <div className="success-msg">{planResult}</div>}
+                
+                <form onSubmit={handleRequestPlan} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label htmlFor="pacienteId">Identificación Paciente</label>
+                      <input 
+                        type="text" 
+                        id="pacienteId"
+                        value={pacienteId}
+                        onChange={(e) => setPacienteId(e.target.value)}
+                        placeholder="ej. PAC-983"
+                        disabled={planLoading}
+                        required
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label htmlFor="tipoPlan">Tipo de Plan</label>
+                      <select 
+                        id="tipoPlan"
+                        value={tipoPlan}
+                        onChange={(e) => setTipoPlan(e.target.value)}
+                        disabled={planLoading}
+                        required
+                      >
+                        <option value="Balanceado">Balanceado</option>
+                        <option value="Keto (Cetogénico)">Keto (Cetogénico)</option>
+                        <option value="Vegano">Vegano</option>
+                        <option value="Hiperproteico">Hiperproteico</option>
+                      </select>
                     </div>
                   </div>
-                )}
 
-                {/* 2d. AUDIT LOGS FOR TEACHERS ONLY (Not shown to Students at all) */}
-                {role === 'Docentes' && (
-                  <div className="card" style={{ padding: '24px', margin: 0, width: '100%', borderRadius: '20px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid rgba(30, 63, 32, 0.08)', paddingBottom: '8px' }}>
-                      <h2 style={{ fontSize: '1.2rem', textAlign: 'left', margin: 0, border: 'none', padding: 0 }}>
-                        Auditoría de Planes (DynamoDB)
-                      </h2>
-                      <button 
-                        onClick={loadAuditTasks} 
-                        className="btn btn-secondary" 
-                        style={{ width: 'auto', marginTop: 0, padding: '4px 10px', fontSize: '0.8rem' }}
-                        disabled={auditLoading}
-                      >
-                        Refrescar
-                      </button>
+                  {/* FOOD BUILDER SUBFORM */}
+                  <div style={{ 
+                    background: 'rgba(30, 63, 32, 0.02)',
+                    border: '1px solid hsl(var(--card-border))',
+                    borderRadius: '12px',
+                    padding: '16px',
+                    marginTop: '8px'
+                  }}>
+                    <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'hsl(var(--text-secondary))', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Añadir Alimentos al Menú
+                    </span>
+
+                    {/* Quick-Add Chips */}
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', margin: '12px 0 16px 0' }}>
+                      {quickAddFoods.map((qFood, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleQuickAdd(qFood)}
+                          disabled={planLoading}
+                          style={{
+                            background: '#ffffff',
+                            border: '1px solid hsl(var(--card-border))',
+                            borderRadius: '20px',
+                            padding: '4px 10px',
+                            fontSize: '0.72rem',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            color: 'hsl(var(--text-primary))',
+                            transition: 'all 0.15s ease'
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.borderColor = 'hsl(var(--primary))'}
+                          onMouseOut={(e) => e.currentTarget.style.borderColor = 'hsl(var(--card-border))'}
+                        >
+                          <span>{qFood.icon}</span> {qFood.nombre} ({qFood.cantidad})
+                        </button>
+                      ))}
                     </div>
 
-                    {auditError && <div className="error-msg">{auditError}</div>}
-
-                    {auditLoading ? (
-                      <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
-                        <div className="spinner" style={{ borderColor: 'rgba(30,63,32,0.1)', borderTopColor: 'hsl(var(--primary))' }}></div>
+                    {/* Custom Food Row Input */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr 1fr', gap: '10px', alignItems: 'end' }}>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label style={{ fontSize: '0.7rem' }}>Nombre Alimento</label>
+                        <input
+                          type="text"
+                          value={foodName}
+                          onChange={(e) => setFoodName(e.target.value)}
+                          placeholder="ej. Filete de Pescado"
+                          disabled={planLoading}
+                          style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                        />
                       </div>
-                    ) : tasks.length === 0 ? (
-                      <p style={{ textAlign: 'center', color: 'hsl(var(--text-muted))', padding: '16px 0' }}>
-                        No hay tareas registradas en la base de datos.
-                      </p>
-                    ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto' }}>
-                        {tasks.map((task) => (
-                          <div 
-                            key={task.task_id} 
-                            onClick={() => setSelectedTask(selectedTask?.task_id === task.task_id ? null : task)}
-                            style={{ 
-                              background: 'rgba(30, 63, 32, 0.02)', 
-                              border: '1px solid hsl(var(--card-border))', 
-                              borderRadius: '8px', 
-                              padding: '10px 12px',
-                              cursor: 'pointer',
-                              transition: 'all 0.2s ease',
-                              borderColor: selectedTask?.task_id === task.task_id ? 'hsl(var(--primary))' : 'hsl(var(--card-border))'
-                            }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <div>
-                                <p style={{ fontSize: '0.8rem', fontWeight: 600, margin: 0 }}>Paciente: {task.paciente_id || 'N/A'}</p>
-                                <p style={{ fontSize: '0.72rem', color: 'hsl(var(--text-muted))', marginTop: '2px', margin: 0 }}>
-                                  ID: {task.task_id.substring(0, 8)}... ({task.tipo_plan})
-                                </p>
-                              </div>
-                              <span style={{ 
-                                fontSize: '0.72rem', 
-                                fontWeight: 700, 
-                                padding: '2px 8px', 
-                                borderRadius: '12px',
-                                background: task.status === 'COMPLETADO' ? '#ecfdf5' : '#fff7ed',
-                                color: task.status === 'COMPLETADO' ? '#047857' : '#c2410c'
-                              }}>
-                                {task.status}
-                              </span>
-                            </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label style={{ fontSize: '0.7rem' }}>Porción/Cant.</label>
+                        <input
+                          type="text"
+                          value={foodQty}
+                          onChange={(e) => setFoodQty(e.target.value)}
+                          placeholder="ej. 150g"
+                          disabled={planLoading}
+                          style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                        />
+                      </div>
+                      <div className="form-group" style={{ marginBottom: 0 }}>
+                        <label style={{ fontSize: '0.7rem' }}>Momento Comida</label>
+                        <select
+                          value={foodMeal}
+                          onChange={(e) => setFoodMeal(e.target.value)}
+                          disabled={planLoading}
+                          style={{ padding: '8px 12px', fontSize: '0.85rem' }}
+                        >
+                          <option value="Desayuno">Desayuno</option>
+                          <option value="Almuerzo">Almuerzo</option>
+                          <option value="Cena">Cena</option>
+                          <option value="Colación">Colación</option>
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <button 
+                      type="button" 
+                      onClick={handleAddFood} 
+                      className="btn btn-secondary" 
+                      disabled={planLoading}
+                      style={{ marginTop: '12px', padding: '8px 12px', fontSize: '0.8rem', width: 'auto' }}
+                    >
+                      + Agregar a la Lista
+                    </button>
 
-                            {/* Expanded details */}
-                            {selectedTask?.task_id === task.task_id && (
-                              <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid rgba(0,0,0,0.05)', fontSize: '0.75rem', color: 'hsl(var(--text-secondary))', animation: 'fadeIn 0.2s ease-out' }}>
-                                <p style={{ margin: '2px 0' }}><strong>Creado:</strong> {task.created_at || 'N/A'}</p>
-                                {task.alimentos && task.alimentos.length > 0 ? (
-                                  <div style={{ marginTop: '6px' }}>
-                                    <strong>Alimentos en el Menú:</strong>
-                                    <ul style={{ paddingLeft: '14px', margin: '2px 0 0 0' }}>
-                                      {task.alimentos.map((al, idx) => (
-                                        <li key={idx}>{al.nombre} ({al.cantidad}) - {al.comida}</li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                ) : (
-                                  <p style={{ margin: '4px 0', color: 'hsl(var(--text-muted))', fontStyle: 'italic' }}>Sin alimentos asociados.</p>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                    {/* List of current foods */}
+                    {alimentos.length > 0 && (
+                      <div style={{ marginTop: '16px', maxHeight: '160px', overflowY: 'auto', borderTop: '1px solid rgba(0,0,0,0.05)', paddingTop: '12px' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem', textAlign: 'left' }}>
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid rgba(0,0,0,0.08)' }}>
+                              <th style={{ padding: '6px', color: 'hsl(var(--text-muted))' }}>Alimento</th>
+                              <th style={{ padding: '6px', color: 'hsl(var(--text-muted))' }}>Cantidad</th>
+                              <th style={{ padding: '6px', color: 'hsl(var(--text-muted))' }}>Comida</th>
+                              <th style={{ padding: '6px', textAlign: 'center' }} />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {alimentos.map((item, idx) => (
+                              <tr key={idx} style={{ borderBottom: '1px solid rgba(0,0,0,0.03)' }}>
+                                <td style={{ padding: '6px', fontWeight: 500 }}>{item.nombre}</td>
+                                <td style={{ padding: '6px' }}>{item.cantidad}</td>
+                                <td style={{ padding: '6px' }}>
+                                  <span style={{
+                                    fontSize: '0.7rem',
+                                    padding: '2px 6px',
+                                    borderRadius: '8px',
+                                    background: item.comida === 'Desayuno' ? '#eff6ff' : item.comida === 'Almuerzo' ? '#ecfdf5' : item.comida === 'Cena' ? '#f5f3ff' : '#fff7ed',
+                                    color: item.comida === 'Desayuno' ? '#1d4ed8' : item.comida === 'Almuerzo' ? '#047857' : item.comida === 'Cena' ? '#6d28d9' : '#c2410c'
+                                  }}>
+                                    {item.comida}
+                                  </span>
+                                </td>
+                                <td style={{ padding: '6px', textAlign: 'center' }}>
+                                  <button 
+                                    type="button" 
+                                    onClick={() => handleRemoveFood(idx)}
+                                    style={{ border: 'none', background: 'transparent', color: '#ef4444', cursor: 'pointer', fontSize: '0.9rem' }}
+                                    title="Quitar"
+                                  >
+                                    ✕
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                   </div>
-                )}
 
+                  <button type="submit" className="btn" disabled={planLoading || alimentos.length === 0} style={{ marginTop: '8px' }}>
+                    {planLoading ? <div className="spinner"></div> : `Solicitar Plan (${alimentos.length} alimentos)`}
+                  </button>
+                </form>
               </div>
 
+              {/* Right Side: Generated Plan Report */}
+              {lastCreatedPlan && (
+                <div className="card" style={{ padding: '24px', margin: 0, width: '100%', borderRadius: '20px', border: '1px solid rgba(16, 185, 129, 0.25)', background: 'rgba(16, 185, 129, 0.01)', animation: 'fadeIn 0.3s ease-out' }}>
+                  <h2 style={{ fontSize: '1.2rem', textAlign: 'left', marginBottom: '14px', borderBottom: '1px solid rgba(30, 63, 32, 0.08)', paddingBottom: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span>Reporte Plan Nutricional</span>
+                    <span style={{
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: '12px',
+                      background: lastCreatedPlan.estado_actual === 'COMPLETADO' ? '#ecfdf5' : '#fff7ed',
+                      color: lastCreatedPlan.estado_actual === 'COMPLETADO' ? '#047857' : '#c2410c'
+                    }}>
+                      {lastCreatedPlan.estado_actual}
+                    </span>
+                  </h2>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '0.85rem' }}>
+                    <p style={{ margin: 0 }}><strong>ID Paciente:</strong> {lastCreatedPlan.paciente_id}</p>
+                    <p style={{ margin: 0 }}><strong>Tipo de Dieta:</strong> {lastCreatedPlan.tipo_plan}</p>
+                    
+                    {lastCreatedPlan.alimentos && lastCreatedPlan.alimentos.length > 0 ? (
+                      <div style={{ marginTop: '8px' }}>
+                        <strong style={{ display: 'block', marginBottom: '6px' }}>Menú Estructurado:</strong>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {['Desayuno', 'Almuerzo', 'Cena', 'Colación'].map((meal) => {
+                            const mealFoods = lastCreatedPlan.alimentos.filter(f => f.comida === meal);
+                            if (mealFoods.length === 0) return null;
+                            return (
+                              <div key={meal} style={{ borderLeft: '3px solid hsl(var(--primary))', paddingLeft: '8px', margin: '4px 0' }}>
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'hsl(var(--primary))', textTransform: 'uppercase' }}>{meal}</span>
+                                <ul style={{ paddingLeft: '14px', margin: '2px 0 0 0', color: 'hsl(var(--text-primary))' }}>
+                                  {mealFoods.map((f, i) => (
+                                    <li key={i}>{f.nombre} ({f.cantidad})</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <p style={{ color: 'hsl(var(--text-muted))', fontStyle: 'italic', margin: 0 }}>No se cargaron alimentos para este plan.</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
-            {/* 3. DEVELOPER TOOLS COLLAPSIBLE PANEL */}
+            {/* DEVELOPER TOOLS COLLAPSIBLE PANEL */}
             <details style={{ 
               background: '#fdfdfc',
               border: '1px solid hsl(var(--card-border))',
