@@ -1,155 +1,129 @@
-# Sistema Nutricional Asíncrono (FastAPI + AWS DynamoDB)
+# Sistema Nutricional NutriA (FastAPI + AWS Cognito + AWS DynamoDB + React SPA)
 
-Este proyecto es un sistema de procesamiento nutricional basado en una arquitectura asíncrona simplificada. Utiliza **FastAPI** para la API del backend, **FastAPI BackgroundTasks** para procesar los planes en segundo plano de manera no bloqueante, y **AWS DynamoDB** para persistir el estado de las tareas.
+Este proyecto es una plataforma integral para nutrición y salud clínica orientada a la **Gestión de Expedientes Clínicos y el Motor de Cálculo Antropométrico Síncrono** (v1.0). El sistema implementa las mejores prácticas en seguridad (RBAC) y privacidad de datos de salud bajo estándares internacionales (ISO 25000).
 
-## 🏗️ Arquitectura
+## 🏗️ Arquitectura de la Solución
 
-El sistema consta de dos componentes principales orquestados con Docker:
+La solución se compone de tres servicios fundamentales organizados y orquestados mediante contenedores de Docker:
 
-1. **API (FastAPI):** Recibe las solicitudes de planes nutricionales (`POST /plan`), registra el plan como `PENDIENTE` en la base de datos y agenda inmediatamente una tarea en segundo plano (`BackgroundTasks`) para iniciar el cálculo, retornando el control al cliente de inmediato (HTTP 202).
-2. **DynamoDB (Base de Datos):** Una instancia de DynamoDB Local que mantiene el estado, trazabilidad y logs de error de cada tarea.
+1. **Frontend (React SPA):** Interfaz premium construida sobre la paleta de colores Verde Bosque (`#1E3F20`) y Crema (`#FDFBF7`), expuesta de forma síncrona en el puerto **3000** y consumiendo la API de backend con latencia de renderizado menor a **100 ms**.
+2. **API (FastAPI):** Backend en Python expuesto en el puerto **8000**, con soporte completo de políticas CORS restringidas a los dominios locales y a la IP de producción `http://3.134.114.180:3000`. Incluye endpoints legados y endpoints `/api/v1/` firmados por contrato OpenAPI.
+3. **DynamoDB (Persistencia):** Utiliza AWS DynamoDB en la nube (o DynamoDB Local) para la persistencia del estado de tareas y el histórico de auditoría antropométrica.
 
 ```mermaid
 graph TD
-    Client[Cliente / curl] -->|POST /plan| API[API Backend: FastAPI]
-    API -->|1. Registra en DB como PENDIENTE| DB[(DynamoDB Local)]
-    API -->|2. Retorna HTTP 202 + task_id| Client
-    API -->|3. Agenda tarea asíncrona| BG[FastAPI BackgroundTasks]
-    BG -->|4. Cambia estado a PROCESANDO| DB
-    BG -->|5. Simula cálculo de 5s| BG
-    BG -->|6. Cambia estado a COMPLETADO| DB
-    Client -->|GET /tasks/id/ready| API
+    Client[Cliente React / SPA] -->|POST /api/v1/clinical/calculate| API[API Backend: FastAPI]
+    API -->|1. Valida Roles RBAC y Claims| Cognito[AWS Cognito Pool]
+    API -->|2. Ecuaciones IMC/ICC y Reglas OMS| Engine[Motor Antropométrico]
+    API -->|3. Registro Seudonimizado| DB[(DynamoDB - Auditoria_Planes_Table)]
+    API -->|4. Retorna Diagnóstico < 300 ms| Client
 ```
+
+---
 
 ## 🚀 Requisitos
 
 *   [Docker](https://docs.docker.com/get-docker/)
 *   [Docker Compose](https://docs.docker.com/compose/install/)
 
-## 🛠️ Instalación y Despliegue
+---
 
-Para levantar la base de datos local y la API, simplemente ejecuta en tu terminal:
+## 🛠️ Instalación y Despliegue Local
+
+Para levantar la base de datos local (DynamoDB Local), el backend en FastAPI y el frontend en React expuesto en el puerto **3000**, ejecuta en la raíz del proyecto:
 
 ```bash
-sudo docker compose up --build
+docker compose up --build
 ```
 
-*(O en segundo plano usando la bandera `-d`):*
-```bash
-sudo docker compose up --build -d
-```
-
-Esto levantará:
+Esto iniciará:
+*   **Frontend (React SPA):** [http://localhost:3000](http://localhost:3000)
 *   **API (FastAPI):** [http://localhost:8000](http://localhost:8000)
-*   **DynamoDB Local:** `http://localhost:8001` (Internamente mapeado al puerto `8000` de su contenedor)
+*   **DynamoDB Local:** `http://localhost:8001` (para desarrollo local)
 
 ---
 
-## 🧪 Pruebas de la API (Autenticación y Roles con AWS Cognito)
+## 🔒 Parámetros de Seguridad e Infraestructura (RBAC & Privacidad)
 
-El sistema ahora está protegido mediante autenticación con **Tokens JWT** (AWS Cognito). Para facilitar el desarrollo y pruebas locales, el sistema cuenta con tokens de prueba ("mock"):
-*   **Token Estudiante:** `mock-student-token` (Da acceso a los roles de la agrupación `Estudiantes`).
-*   **Token Docente:** `mock-teacher-token` (Da acceso a los roles de la agrupación `Docentes`).
+### 1. Control de Acceso Basado en Roles (RBAC)
+*   **Estudiantes:** Autorizados para registrar expedientes y consumir el motor antropométrico (`POST /api/v1/clinical/calculate`). No tienen acceso a rutas de auditoría ni administración.
+*   **Docentes (Administradores):** Autorizados para acceder a los tableros de auditoría del sistema. Intentar consumir endpoints administrativos con tokens de estudiante devolverá un error **HTTP 403 Forbidden**.
+*   **Validación Local / Mock:**
+    *   Token Estudiante: `mock-student-token`
+    *   Token Docente: `mock-teacher-token`
 
-> [!IMPORTANT]
-> Si intentas acceder a cualquier endpoint sin el encabezado `Authorization`, recibirás un error `401 Unauthorized`. Si intentas acceder a un endpoint de Docentes con un token de Estudiante, recibirás un error `403 Forbidden`.
-
----
-
-### 1. Enviar una solicitud de plan nutricional (Acceso: Estudiantes o Docentes)
-Puedes enviar una solicitud usando `curl` o cualquier cliente REST, incluyendo la cabecera de autorización:
-
-```bash
-curl -X POST http://localhost:8000/plan \
-     -H "Content-Type: application/json" \
-     -H "Authorization: Bearer mock-student-token" \
-     -d '{"paciente_id": 123, "tipo_plan": "Keto"}'
-```
-
-**Respuesta esperada (HTTP 202):**
-```json
-{
-  "task_id": "848bb246-8800-4b8a-9861-6d73f4e24ef5",
-  "status": "PENDIENTE",
-  "message": "Solicitud recibida y registrada",
-  "status_url": "/tasks/848bb246-8800-4b8a-9861-6d73f4e24ef5",
-  "ready_url": "/tasks/848bb246-8800-4b8a-9861-6d73f4e24ef5/ready",
-  "poll_interval_seconds": 2
-}
-```
-
-### 2. Consultar el estado de la tarea (Polling) (Acceso: Estudiantes o Docentes)
-Para verificar el estado de procesamiento de tu plan:
-
-```bash
-curl -H "Authorization: Bearer mock-student-token" http://localhost:8000/tasks/TU_TASK_ID/ready
-```
-
-**Durante el procesamiento (primeros 5 segundos):**
-```json
-{
-  "task_id": "TU_TASK_ID",
-  "ready": false,
-  "status": "PROCESANDO",
-  "terminal": false,
-  "should_continue_polling": true,
-  "poll_interval_seconds": 2,
-  "updated_at": "2026-06-02T19:10:00.123456"
-}
-```
-
-**Al finalizar (después de 5 segundos):**
-```json
-{
-  "task_id": "TU_TASK_ID",
-  "ready": true,
-  "status": "COMPLETADO",
-  "terminal": true,
-  "should_continue_polling": false,
-  "poll_interval_seconds": 2,
-  "updated_at": "2026-06-02T19:10:05.123456",
-  "finished_at": "2026-06-02T19:10:05.123456"
-}
-```
-
-### 3. Detalle completo de la tarea (Acceso: Estudiantes o Docentes)
-Para obtener todo el registro almacenado en DynamoDB:
-
-```bash
-curl -H "Authorization: Bearer mock-student-token" http://localhost:8000/tasks/TU_TASK_ID
-```
-
-### 4. Consultar todas las tareas del sistema (Acceso exclusivo: Docentes)
-Si intentas realizar esta consulta con un token de estudiante (`mock-student-token`), recibirás un error `403 Forbidden`. Debes utilizar el token de docente:
-
-```bash
-curl -H "Authorization: Bearer mock-teacher-token" http://localhost:8000/admin/tasks
-```
-
-**Respuesta esperada (HTTP 200):**
-Un listado con todas las tareas registradas en la base de datos de DynamoDB.
+### 2. Privacidad y Seudonimización (ISO 25000)
+Queda prohibido escribir, almacenar o persistir nombres, correos o números de cédula dentro de los registros de auditoría de la tabla `Auditoria_Planes_Table` de DynamoDB.
+*   El motor genera un identificador aleatorio universal `Patient_ID` bajo el estándar **UUIDv4** en cada petición exitosa para garantizar el completo anonimato clínico de los datos de salud.
 
 ---
 
-## 📁 Estructura del Proyecto
+## 🧪 Pruebas de Endpoints (Contratos OpenAPI)
+
+### 1. Motor Antropométrico Síncrono (Acceso: Estudiantes)
+Calcula el IMC, clasifica según criterios de la OMS, calcula el ICC, clasifica el riesgo cardiovascular y la distribución de grasa corporal en menos de **300 ms**.
+
+*   **Endpoint:** `POST /api/v1/clinical/calculate` (o `POST /clinical/calculate`)
+*   **Encabezado:** `Authorization: Bearer mock-student-token`
+*   **Carga Útil de Entrada (JSON):**
+```json
+{
+  "peso_kg": 70.00,
+  "estatura_m": 1.75,
+  "perimetro_cintura_cm": 100.00,
+  "perimetro_cadera_cm": 90.00,
+  "sexo_biologico": "Masculino"
+}
+```
+
+*   **Respuesta Exitosa (HTTP 200):**
+```json
+{
+  "imc": 22.86,
+  "imc_clasificacion": "Normal",
+  "icc": 1.11,
+  "icc_riesgo": "Alto",
+  "distribucion_grasa": "Obesidad Androide (Manzana)"
+}
+```
+
+*   **Lógica de Clasificación:**
+    *   **IMC:** Bajo Peso (<18.5), Normal (18.5 a <25), Sobrepeso (25 a <30), Obesidad (>=30).
+    *   **ICC (Hombres):** Bajo (<=0.90), Moderado (0.90-0.95), Alto (>0.95 -> Obesidad Androide/Manzana).
+    *   **ICC (Mujeres):** Bajo (<=0.80), Moderado (0.80-0.85), Alto (>0.85 -> Obesidad Androide/Manzana).
+
+---
+
+## 📁 Estructura Completa del Proyecto
 
 ```text
-.
-├── api/
-│   ├── Dockerfile
-│   ├── main.py          # Entrada de la API FastAPI
-│   ├── config.py        # Carga centralizada de variables de entorno
-│   ├── database.py      # Inicializador y utilidades de DynamoDB
-│   ├── models.py        # Esquemas de datos de Pydantic
-│   ├── auth.py          # Verificación JWT de Cognito y RBAC
-│   ├── tasks.py         # Lógica de tareas asíncronas en segundo plano
-│   └── routers/         # Enrutadores modulares de la aplicación
-│       ├── __init__.py
-│       ├── health.py    # Health check
-│       ├── plans.py     # Creación y consulta de planes nutricionales
-│       └── admin.py     # Auditoría de tareas para docentes
-├── docker-compose.yml   # Orquestación de servicios locales
-├── requirements.txt     # Dependencias de Python
-├── .env                 # Variables de entorno y credenciales (excluido en git)
-└── .gitignore           # Archivos ignorados en control de versiones
+Sistema-Estudiantes-Nutricion/
+├── docker-compose.yml       # Orquestación de servicios (Frontend 3000, API 8000, DynamoDB 8001)
+├── requirements.txt         # Dependencias Python
+├── frontend/
+│   ├── Dockerfile           # Construcción de la imagen React expuesta en el puerto 3000
+│   ├── package.json
+│   ├── vite.config.js       # Configuración del servidor de desarrollo en puerto 3000
+│   └── src/
+│       ├── main.jsx
+│       ├── App.jsx
+│       ├── index.css        # Estilo Forest Green (#1E3F20) y Crema (#FDFBF7)
+│       ├── services/
+│       │   └── api.js       # Servicio cliente HTTP con llamadas a /api/v1/
+│       └── components/
+│           ├── LoginRegister.jsx       # Formulario unificado de Login y Registro (cédula y edad validados)
+│           ├── Dashboard.jsx           # Panel principal con inyección de JWT e información de Cognito
+│           └── AntropometriaForm.jsx   # Formulario interactivo del Motor de Cálculo Clínico
+└── api/
+    ├── Dockerfile           # Imagen del backend FastAPI expuesta en el puerto 8000
+    ├── main.py              # Inicialización de la API, restricciones CORS y carga de routers
+    ├── config.py            # Parámetros del pool de Cognito y tablas de DynamoDB
+    ├── database.py          # Gestor de conexiones DynamoDB (Tablas: tasks y Auditoria_Planes_Table)
+    ├── auth.py              # Middleware JWT y validación RBAC
+    ├── models.py            # Modelos Pydantic del backend
+    └── routers/
+        ├── auth.py          # Rutas de login y registro en Cognito (inyección de cédula en profile)
+        ├── plans.py         # Creación y polling asíncrono de planes
+        ├── admin.py         # Rutas de administración y auditoría de tareas (Docentes)
+        └── clinical.py      # Motor de reglas y cálculos antropométricos (síncrono)
 ```
