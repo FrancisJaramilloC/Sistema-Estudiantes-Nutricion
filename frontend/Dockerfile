@@ -11,8 +11,8 @@ RUN npm install
 # Copiar el código del frontend
 COPY . .
 
-# Exponer el puerto por defecto de Vite
-EXPOSE 5173
+# Exponer el puerto 3000 para cumplir con el PRD
+EXPOSE 3000
 
-# Correr el servidor de desarrollo de Vite escuchando en todas las interfaces (0.0.0.0)
-CMD ["npm", "run", "dev", "--", "--host"]
+# Correr el servidor de desarrollo de Vite en el puerto 3000
+CMD ["npm", "run", "dev", "--", "--host", "--port", "3000"]

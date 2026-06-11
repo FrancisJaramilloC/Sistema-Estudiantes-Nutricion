@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
+import AntropometriaForm from './AntropometriaForm';
 
 export default function Dashboard({ token, username, onLogout }) {
   const [userPayload, setUserPayload] = useState(null);
@@ -146,6 +147,11 @@ export default function Dashboard({ token, username, onLogout }) {
           </div>
         </div>
       </div>
+
+      {/* Motor de Cálculo Antropométrico (Solo Estudiantes) */}
+      {role === 'Estudiantes' && (
+        <AntropometriaForm token={token} />
+      )}
 
       {/* Formulario de Solicitud de Plan */}
       <div style={{ marginBottom: '30px' }}>

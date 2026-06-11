@@ -92,5 +92,28 @@ export const apiService = {
       throw new Error(data.detail || 'Error al solicitar el plan');
     }
     return data;
+  },
+
+  /**
+   * Envía los datos antropométricos del paciente para el cálculo síncrono.
+   * @param {string} token 
+   * @param {object} clinicalData 
+   */
+  calculateClinical: async (token, clinicalData) => {
+    const url = `${getBaseUrl()}/api/v1/clinical/calculate`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(clinicalData),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al realizar el cálculo antropométrico');
+    }
+    return data;
   }
 };
