@@ -12,23 +12,14 @@ export const apiService = {
    * @param {string} password 
    * @param {string} role "Estudiantes" o "Docentes"
    */
-  register: async (username, email, password, role, nombre, cedula, fecha_nacimiento, adminKey = null) => {
+  register: async (username, email, password, role, nombre, cedula, fecha_nacimiento) => {
     const url = `${getBaseUrl()}/api/v1/auth/register`;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ 
-        username, 
-        email, 
-        password, 
-        role, 
-        nombre, 
-        cedula, 
-        fecha_nacimiento, 
-        admin_key: adminKey 
-      }),
+      body: JSON.stringify({ username, email, password, role, nombre, cedula, fecha_nacimiento }),
     });
 
     const data = await response.json();

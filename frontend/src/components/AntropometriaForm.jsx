@@ -8,6 +8,9 @@ export default function AntropometriaForm({ token }) {
   const [cinturaCm, setCinturaCm] = useState('');
   const [caderaCm, setCaderaCm] = useState('');
   const [sexoBiologico, setSexoBiologico] = useState('Masculino');
+  const [edad, setEdad] = useState('');
+  const [factorActividad, setFactorActividad] = useState('1.2');
+  const [eta, setEta] = useState('10'); // Efecto Termogénico (default 10%)
 
   // Control states
   const [loading, setLoading] = useState(false);
@@ -24,6 +27,9 @@ export default function AntropometriaForm({ token }) {
     const estatura = parseFloat(estaturaM);
     const cintura = parseFloat(cinturaCm);
     const cadera = parseFloat(caderaCm);
+    const edadAnios = parseInt(edad, 10);
+    const factAct = parseFloat(factorActividad);
+    const etaVal = parseFloat(eta);
 
     if (isNaN(peso) || peso <= 0 || peso > 500) {
       setError('Por favor, ingresa un peso válido en kg (ej. 70.5).');
@@ -41,6 +47,14 @@ export default function AntropometriaForm({ token }) {
       setError('Por favor, ingresa un perímetro de cadera válido en cm.');
       return;
     }
+    if (isNaN(edadAnios) || edadAnios <= 0 || edadAnios > 120) {
+      setError('Por favor, ingresa una edad válida en años (1 - 120).');
+      return;
+    }
+    if (isNaN(etaVal) || etaVal < 1 || etaVal > 10) {
+      setError('El efecto termogénico de los alimentos debe estar entre 1% y 10%.');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -49,11 +63,14 @@ export default function AntropometriaForm({ token }) {
         estatura_m: estatura,
         perimetro_cintura_cm: cintura,
         perimetro_cadera_cm: cadera,
-        sexo_biologico: sexoBiologico
+        sexo_biologico: sexoBiologico,
+        edad: edadAnios,
+        factor_actividad: factAct,
+        efecto_termogenico: etaVal
       });
       setResults(data);
     } catch (err) {
-      setError(err.message || 'Error al procesar el cálculo antropométrico.');
+      setError(err.message || 'Error al procesar el cálculo antropométrico y metabólico.');
     } finally {
       setLoading(false);
     }
@@ -61,7 +78,7 @@ export default function AntropometriaForm({ token }) {
 
   const getImcColor = (classification) => {
     switch (classification) {
-      case 'Normal': return '#16a34a';
+      case 'Normal': return 'var(--success, #16a34a)';
       case 'Bajo peso': return '#fbbf24';
       case 'Sobrepeso': return '#ea580c';
       case 'Obesidad': return '#dc2626';
@@ -71,45 +88,31 @@ export default function AntropometriaForm({ token }) {
 
   const getIccColor = (risk) => {
     switch (risk) {
-      case 'Bajo': return '#16a34a';
+      case 'Bajo': return 'var(--success, #16a34a)';
       case 'Moderado': return '#fbbf24';
       case 'Alto': return '#dc2626';
       default: return '#78716c';
     }
   };
 
-  // Helper to map BMI (15 - 40 range) to % for the SVG gauge
-  const getBmiPercentage = (bmi) => {
-    const val = parseFloat(bmi);
-    if (isNaN(val)) return 0;
-    const min = 15;
-    const max = 40;
-    const pct = ((val - min) / (max - min)) * 100;
-    return Math.max(0, Math.min(100, pct));
-  };
-
-  // Helper to map ICC (0.6 - 1.2 range) to % for the SVG gauge
-  const getIccPercentage = (icc) => {
-    const val = parseFloat(icc);
-    if (isNaN(val)) return 0;
-    const min = 0.6;
-    const max = 1.2;
-    const pct = ((val - min) / (max - min)) * 100;
+  // Helper to map values for percentage bars (cap at 100)
+  const getPercentage = (value, max) => {
+    const pct = (value / max) * 100;
     return Math.max(0, Math.min(100, pct));
   };
 
   return (
     <div style={{ width: '100%' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
-        <h1 style={{ fontSize: '2rem', textAlign: 'left', margin: 0 }}>Evaluación Antropométrica</h1>
+        <h1 style={{ fontSize: '2rem', textAlign: 'left', margin: 0 }}>Evaluación Antropométrica y Metabólica</h1>
         <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.95rem' }}>
-          Calcula y compara los índices clínicos clave de masa corporal y riesgo cardiovascular con rangos epidemiológicos recomendados.
+          Calcula y compara los índices de masa corporal (IMC), riesgo cardiovascular (ICC), Tasa Metabólica Basal (TMB) y necesidades energéticas totales (GET).
         </p>
       </div>
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'minmax(320px, 1fr) minmax(360px, 1.2fr)',
+        gridTemplateColumns: 'minmax(320px, 1fr) minmax(360px, 1.3fr)',
         gap: '24px',
         width: '100%',
         alignItems: 'start'
@@ -184,22 +187,74 @@ export default function AntropometriaForm({ token }) {
               </div>
             </div>
 
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label htmlFor="edad">Edad (años)</label>
+                <input 
+                  type="number" 
+                  id="edad"
+                  value={edad}
+                  onChange={(e) => setEdad(e.target.value)}
+                  placeholder="ej. 25"
+                  disabled={loading}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label htmlFor="sexoBiologico">Sexo Biológico</label>
+                <select 
+                  id="sexoBiologico"
+                  value={sexoBiologico}
+                  onChange={(e) => setSexoBiologico(e.target.value)}
+                  disabled={loading}
+                  required
+                >
+                  <option value="Masculino">Masculino</option>
+                  <option value="Femenino">Femenino</option>
+                </select>
+              </div>
+            </div>
+
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label htmlFor="sexoBiologico">Sexo Biológico</label>
+              <label htmlFor="factorActividad">Factor de Actividad Física</label>
               <select 
-                id="sexoBiologico"
-                value={sexoBiologico}
-                onChange={(e) => setSexoBiologico(e.target.value)}
+                id="factorActividad"
+                value={factorActividad}
+                onChange={(e) => setFactorActividad(e.target.value)}
                 disabled={loading}
                 required
               >
-                <option value="Masculino">Masculino</option>
-                <option value="Femenino">Femenino</option>
+                <option value="1.2">1.2 - Sedentario (Trabajo de oficina, sin ejercicio)</option>
+                <option value="1.375">1.375 - Actividad Ligera (Ejercicio suave 1-3 veces/sem)</option>
+                <option value="1.55">1.55 - Actividad Moderada (Ejercicio 3-5 veces/sem)</option>
+                <option value="1.725">1.725 - Actividad Intensa (Ejercicio fuerte 6-7 veces/sem)</option>
+                <option value="1.9">1.9 - Actividad Muy Intensa (Atletas, trabajo físico exigente)</option>
               </select>
             </div>
 
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                <label htmlFor="eta">Efecto Termogénico de los Alimentos (ETA)</label>
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'hsl(var(--primary))' }}>{eta}%</span>
+              </div>
+              <input 
+                type="range" 
+                min="1" 
+                max="10" 
+                step="1"
+                id="eta"
+                value={eta}
+                onChange={(e) => setEta(e.target.value)}
+                disabled={loading}
+                style={{ width: '100%', accentColor: 'hsl(var(--primary))' }}
+                required
+              />
+              <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>Rango recomendado de la OMS: 1% a 10% del gasto activo.</span>
+            </div>
+
             <button type="submit" className="btn" disabled={loading} style={{ marginTop: '8px' }}>
-              {loading ? <div className="spinner"></div> : 'Calcular Indicadores síncronamente'}
+              {loading ? <div className="spinner"></div> : 'Calcular Indicadores'}
             </button>
           </form>
         </div>
@@ -208,214 +263,180 @@ export default function AntropometriaForm({ token }) {
         <div className="card" style={{ padding: '24px', margin: 0, width: '100%', borderRadius: '20px', minHeight: '380px', display: 'flex', flexDirection: 'column', justifyContent: results ? 'flex-start' : 'center' }}>
           {!results ? (
             <div style={{ textAlign: 'center', color: 'hsl(var(--text-secondary))', padding: '40px 20px' }}>
-              <div style={{ fontSize: '3rem', marginBottom: '16px' }}>📊</div>
-              <h3 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'hsl(var(--primary))', marginBottom: '8px' }}>
+              <div style={{ fontSize: '3.5rem', marginBottom: '16px' }}>📊</div>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'hsl(var(--primary))', marginBottom: '8px' }}>
                 Esperando Datos de Entrada
               </h3>
-              <p style={{ fontSize: '0.88rem', maxWidth: '320px', margin: '0 auto', color: 'hsl(var(--text-muted))' }}>
-                Completa y envía el formulario de evaluación a la izquierda para procesar y ver las gráficas estadísticas comparativas de nivel clínico.
+              <p style={{ fontSize: '0.9rem', maxWidth: '340px', margin: '0 auto', color: 'hsl(var(--text-muted))', lineHeight: '1.4' }}>
+                Completa y envía el formulario de evaluación a la izquierda para generar los gráficos comparativos de niveles metabólicos e índices corporales.
               </p>
             </div>
           ) : (
-            <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
-              <h2 style={{ fontSize: '1.2rem', textAlign: 'left', marginBottom: '20px', borderBottom: '1px solid rgba(30, 63, 32, 0.08)', paddingBottom: '8px' }}>
-                Diagnóstico y Gráficas de Referencia
+            <div style={{ animation: 'fadeIn 0.3s ease-out', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              <h2 style={{ fontSize: '1.2rem', textAlign: 'left', marginBottom: 0, borderBottom: '1px solid rgba(30, 63, 32, 0.08)', paddingBottom: '8px' }}>
+                Gráfico Comparativo de Niveles
               </h2>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+              {/* 1. IMC COMPARATIVE BARS */}
+              <div>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: '0 0 10px 0', color: 'hsl(var(--text-primary))' }}>
+                  Índice de Masa Corporal (IMC)
+                </h3>
                 
-                {/* 1. IMC STATISTICAL CHART */}
+                {/* User Bar */}
+                <div style={{ marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: '3px' }}>
+                    <span>Tu IMC ({results.imc_clasificacion})</span>
+                    <span style={{ fontWeight: 700, color: getImcColor(results.imc_clasificacion) }}>{results.imc}</span>
+                  </div>
+                  <div style={{ background: 'rgba(0,0,0,0.05)', borderRadius: '6px', height: '16px', overflow: 'hidden' }}>
+                    <div style={{ 
+                      background: getImcColor(results.imc_clasificacion), 
+                      height: '100%', 
+                      width: `${getPercentage(results.imc, 40)}%`, 
+                      transition: 'width 0.8s ease-out' 
+                    }} />
+                  </div>
+                </div>
+
+                {/* Reference Bar */}
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>
-                      Índice de Masa Corporal (IMC)
-                    </span>
-                    <span style={{ 
-                      fontSize: '0.8rem', 
-                      fontWeight: 700, 
-                      padding: '3px 10px', 
-                      borderRadius: '12px',
-                      background: getImcColor(results.imc_clasificacion) + '15',
-                      color: getImcColor(results.imc_clasificacion),
-                      border: `1px solid ${getImcColor(results.imc_clasificacion)}25`
-                    }}>
-                      {results.imc} - {results.imc_clasificacion}
-                    </span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: '3px' }}>
+                    <span>Ideal Recomendado (OMS)</span>
+                    <span style={{ fontWeight: 600, color: 'var(--success, #16a34a)' }}>18.5 - 24.9</span>
                   </div>
-
-                  {/* Horizontal Bar Chart Gauge */}
-                  <div style={{ position: 'relative', height: '40px', marginTop: '16px' }}>
-                    {/* Gauge Segments */}
-                    <div style={{ display: 'flex', height: '12px', borderRadius: '6px', overflow: 'hidden', width: '100%', background: '#e5e7eb' }}>
-                      <div style={{ width: '25%', background: '#f59e0b', title: 'Bajo peso (<18.5)' }} />
-                      <div style={{ width: '30%', background: '#10b981', title: 'Normal (18.5 - 24.9)' }} />
-                      <div style={{ width: '20%', background: '#f97316', title: 'Sobrepeso (25.0 - 29.9)' }} />
-                      <div style={{ width: '25%', background: '#ef4444', title: 'Obesidad (>=30.0)' }} />
-                    </div>
-
-                    {/* Scale markers */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '4px', padding: '0 2px' }}>
-                      <span>15 (Bajo)</span>
-                      <span>18.5</span>
-                      <span>25.0</span>
-                      <span>30.0</span>
-                      <span>40+ (Alto)</span>
-                    </div>
-
-                    {/* Pointer Indicator */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '-6px',
-                      left: `${getBmiPercentage(results.imc)}%`,
-                      transform: 'translateX(-50%)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      transition: 'left 0.5s ease-out'
-                    }}>
-                      {/* Triangle pointer */}
-                      <div style={{
-                        width: 0,
-                        height: 0,
-                        borderLeft: '6px solid transparent',
-                        borderRight: '6px solid transparent',
-                        borderBottom: `6px solid ${getImcColor(results.imc_clasificacion)}`
-                      }} />
-                      {/* Vertical line through bar */}
-                      <div style={{
-                        width: '2px',
-                        height: '14px',
-                        background: getImcColor(results.imc_clasificacion)
-                      }} />
-                      {/* Indicator text bubble */}
-                      <div style={{
-                        marginTop: '2px',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        color: '#ffffff',
-                        background: getImcColor(results.imc_clasificacion),
-                        padding: '1px 6px',
-                        borderRadius: '4px',
-                        boxShadow: '0 2px 5px rgba(0,0,0,0.15)',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        Tu IMC: {results.imc}
-                      </div>
-                    </div>
+                  <div style={{ background: 'rgba(0,0,0,0.05)', borderRadius: '6px', height: '16px', overflow: 'hidden' }}>
+                    <div style={{ 
+                      background: 'var(--success, #16a34a)', 
+                      height: '100%', 
+                      width: `${getPercentage(21.7, 40)}%` 
+                    }} />
                   </div>
                 </div>
-
-                {/* 2. ICC CARDIOVASCULAR RISK CHART */}
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'hsl(var(--text-secondary))' }}>
-                      Índice Cintura-Cadera (ICC)
-                    </span>
-                    <span style={{ 
-                      fontSize: '0.8rem', 
-                      fontWeight: 700, 
-                      padding: '3px 10px', 
-                      borderRadius: '12px',
-                      background: getIccColor(results.icc_riesgo) + '15',
-                      color: getIccColor(results.icc_riesgo),
-                      border: `1px solid ${getIccColor(results.icc_riesgo)}25`
-                    }}>
-                      {results.icc} - Riesgo {results.icc_riesgo}
-                    </span>
-                  </div>
-
-                  {/* Horizontal Bar Chart Gauge */}
-                  <div style={{ position: 'relative', height: '40px', marginTop: '16px' }}>
-                    {/* Gauge Segments */}
-                    <div style={{ display: 'flex', height: '12px', borderRadius: '6px', overflow: 'hidden', width: '100%', background: '#e5e7eb' }}>
-                      <div style={{ width: '50%', background: '#10b981', title: 'Riesgo Bajo' }} />
-                      <div style={{ width: '25%', background: '#f59e0b', title: 'Riesgo Moderado' }} />
-                      <div style={{ width: '25%', background: '#ef4444', title: 'Riesgo Alto' }} />
-                    </div>
-
-                    {/* Scale markers */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.7rem', color: 'hsl(var(--text-muted))', marginTop: '4px', padding: '0 2px' }}>
-                      <span>0.60 (Bajo)</span>
-                      <span>{sexoBiologico === 'Masculino' ? '0.90' : '0.80'}</span>
-                      <span>{sexoBiologico === 'Masculino' ? '0.95' : '0.85'}</span>
-                      <span>1.20 (Alto)</span>
-                    </div>
-
-                    {/* Pointer Indicator */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '-6px',
-                      left: `${getIccPercentage(results.icc)}%`,
-                      transform: 'translateX(-50%)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      transition: 'left 0.5s ease-out'
-                    }}>
-                      {/* Triangle pointer */}
-                      <div style={{
-                        width: 0,
-                        height: 0,
-                        borderLeft: '6px solid transparent',
-                        borderRight: '6px solid transparent',
-                        borderBottom: `6px solid ${getIccColor(results.icc_riesgo)}`
-                      }} />
-                      {/* Vertical line through bar */}
-                      <div style={{
-                        width: '2px',
-                        height: '14px',
-                        background: getIccColor(results.icc_riesgo)
-                      }} />
-                      {/* Indicator text bubble */}
-                      <div style={{
-                        marginTop: '2px',
-                        fontSize: '0.75rem',
-                        fontWeight: 700,
-                        color: '#ffffff',
-                        background: getIccColor(results.icc_riesgo),
-                        padding: '1px 6px',
-                        borderRadius: '4px',
-                        boxShadow: '0 2px 5px rgba(0,0,0,0.15)',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        Tu ICC: {results.icc}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. EVALUATION SUMMARY BOX */}
-                <div style={{ 
-                  background: 'rgba(30, 63, 32, 0.02)',
-                  border: '1px solid rgba(30, 63, 32, 0.08)',
-                  borderRadius: '12px',
-                  padding: '14px',
-                  fontSize: '0.85rem',
-                  lineHeight: '1.45'
-                }}>
-                  <p style={{ margin: 0, color: 'hsl(var(--text-primary))', marginBottom: '8px' }}>
-                    <strong>Análisis Clínico:</strong> Distribución de grasa de tipo <strong>{results.distribucion_grasa}</strong>.
-                  </p>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', color: 'hsl(var(--text-secondary))' }}>
-                    <div>
-                      • <strong>Recomendación IMC:</strong> El rango saludable recomendado por la OMS está entre <strong>18.5 y 24.9</strong>. 
-                      {results.imc_clasificacion === 'Normal' 
-                        ? ' Te encuentras en un peso saludable.' 
-                        : results.imc_clasificacion === 'Bajo peso'
-                        ? ' Se aconseja una valoración calórica para alcanzar un rango idóneo.'
-                        : ' Se recomienda un plan hipocalórico estructurado y actividad física dirigida.'}
-                    </div>
-                    <div>
-                      • <strong>Recomendación Cardiovascular (ICC):</strong> Para personas de sexo biológico {sexoBiologico.toLowerCase()}, el límite superior recomendado para riesgo bajo es de <strong>{sexoBiologico === 'Masculino' ? '0.90' : '0.80'}</strong>.
-                      {results.icc_riesgo === 'Bajo'
-                        ? ' Tu distribución de grasa representa un riesgo cardiovascular bajo.'
-                        : ' Tu distribución de grasa central indica una mayor acumulación de grasa visceral. Se aconseja realizar controles clínicos metabólicos.'}
-                    </div>
-                  </div>
-                </div>
-
               </div>
+
+              {/* 2. ICC COMPARATIVE BARS */}
+              <div>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: '0 0 10px 0', color: 'hsl(var(--text-primary))' }}>
+                  Índice Cintura-Cadera (ICC) y Riesgo
+                </h3>
+                
+                {/* User Bar */}
+                <div style={{ marginBottom: '8px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: '3px' }}>
+                    <span>Tu ICC (Riesgo {results.icc_riesgo})</span>
+                    <span style={{ fontWeight: 700, color: getIccColor(results.icc_riesgo) }}>{results.icc}</span>
+                  </div>
+                  <div style={{ background: 'rgba(0,0,0,0.05)', borderRadius: '6px', height: '16px', overflow: 'hidden' }}>
+                    <div style={{ 
+                      background: getIccColor(results.icc_riesgo), 
+                      height: '100%', 
+                      width: `${getPercentage(results.icc, 1.2)}%`, 
+                      transition: 'width 0.8s ease-out' 
+                    }} />
+                  </div>
+                </div>
+
+                {/* Reference Bar */}
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', marginBottom: '3px' }}>
+                    <span>Límite Saludable Recomendado</span>
+                    <span style={{ fontWeight: 600, color: 'var(--success, #16a34a)' }}>{sexoBiologico === 'Masculino' ? '≤ 0.90' : '≤ 0.80'}</span>
+                  </div>
+                  <div style={{ background: 'rgba(0,0,0,0.05)', borderRadius: '6px', height: '16px', overflow: 'hidden' }}>
+                    <div style={{ 
+                      background: 'var(--success, #16a34a)', 
+                      height: '100%', 
+                      width: `${getPercentage(sexoBiologico === 'Masculino' ? 0.90 : 0.80, 1.2)}%` 
+                    }} />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. TMB & GET COMPARISON CHART */}
+              <div>
+                <h3 style={{ fontSize: '0.9rem', fontWeight: 600, margin: '0 0 10px 0', color: 'hsl(var(--text-primary))' }}>
+                  Necesidades Energéticas Diarias (kcal)
+                </h3>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  
+                  {/* Mifflin-St Jeor Column */}
+                  <div style={{ background: 'rgba(30, 63, 32, 0.02)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(30, 63, 32, 0.06)' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'hsl(var(--primary))', marginBottom: '8px', textAlign: 'center' }}>
+                      Fórmula Mifflin-St Jeor
+                    </div>
+                    
+                    {/* TMB */}
+                    <div style={{ marginBottom: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'hsl(var(--text-secondary))', marginBottom: '2px' }}>
+                        <span>TMB (Basal):</span>
+                        <span style={{ fontWeight: 600 }}>{results.tmb_mifflin} kcal</span>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.05)', borderRadius: '4px', height: '10px', overflow: 'hidden' }}>
+                        <div style={{ background: '#3b82f6', height: '100%', width: `${getPercentage(results.tmb_mifflin, 3500)}%` }} />
+                      </div>
+                    </div>
+
+                    {/* GET */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'hsl(var(--text-secondary))', marginBottom: '2px' }}>
+                        <span>GET (Total):</span>
+                        <span style={{ fontWeight: 700, color: 'hsl(var(--primary))' }}>{results.gasto_total_mifflin} kcal</span>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.05)', borderRadius: '4px', height: '10px', overflow: 'hidden' }}>
+                        <div style={{ background: 'var(--success, #16a34a)', height: '100%', width: `${getPercentage(results.gasto_total_mifflin, 3500)}%` }} />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Harris-Benedict Column */}
+                  <div style={{ background: 'rgba(30, 63, 32, 0.02)', padding: '12px', borderRadius: '12px', border: '1px solid rgba(30, 63, 32, 0.06)' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'hsl(var(--primary))', marginBottom: '8px', textAlign: 'center' }}>
+                      Fórmula Harris-Benedict
+                    </div>
+                    
+                    {/* TMB */}
+                    <div style={{ marginBottom: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'hsl(var(--text-secondary))', marginBottom: '2px' }}>
+                        <span>TMB (Basal):</span>
+                        <span style={{ fontWeight: 600 }}>{results.tmb_harris} kcal</span>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.05)', borderRadius: '4px', height: '10px', overflow: 'hidden' }}>
+                        <div style={{ background: '#3b82f6', height: '100%', width: `${getPercentage(results.tmb_harris, 3500)}%` }} />
+                      </div>
+                    </div>
+
+                    {/* GET */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: 'hsl(var(--text-secondary))', marginBottom: '2px' }}>
+                        <span>GET (Total):</span>
+                        <span style={{ fontWeight: 700, color: 'hsl(var(--primary))' }}>{results.gasto_total_harris} kcal</span>
+                      </div>
+                      <div style={{ background: 'rgba(0,0,0,0.05)', borderRadius: '4px', height: '10px', overflow: 'hidden' }}>
+                        <div style={{ background: 'var(--success, #16a34a)', height: '100%', width: `${getPercentage(results.gasto_total_harris, 3500)}%` }} />
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Info Banner */}
+              <div style={{ 
+                background: 'rgba(30, 63, 32, 0.02)', 
+                border: '1px solid rgba(30, 63, 32, 0.06)', 
+                borderRadius: '12px', 
+                padding: '12px',
+                fontSize: '0.82rem',
+                color: 'hsl(var(--text-secondary))',
+                lineHeight: '1.4'
+              }}>
+                ℹ️ <strong>Tasa Metabólica Basal (TMB):</strong> Las calorías mínimas que tu cuerpo requiere para sobrevivir en reposo. 
+                <br />
+                <strong>Gasto Energético Total (GET):</strong> Es el requerimiento diario incluyendo tu factor de actividad física ({factorActividad}) más el efecto termogénico de alimentos ({eta}%).
+              </div>
+
             </div>
           )}
         </div>

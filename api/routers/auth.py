@@ -21,7 +21,6 @@ class RegisterRequest(BaseModel):
     nombre: str
     cedula: str
     fecha_nacimiento: str
-    admin_key: str = None
 
 class LoginRequest(BaseModel):
     username: str
@@ -43,14 +42,6 @@ def is_local_mode():
 
 @router.post("/register")
 def register(req: RegisterRequest):
-    # Validar acceso a rol de Docente
-    if req.role == UserRole.DOCENTES:
-        if not req.admin_key or req.admin_key != "Docente2026!":
-            raise HTTPException(
-                status_code=400,
-                detail="Clave de docente incorrecta o no proporcionada. No tiene permisos para registrarse como Docente."
-            )
-
     if is_local_mode():
         try:
             db = get_dynamodb_resource()

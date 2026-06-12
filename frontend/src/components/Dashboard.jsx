@@ -2,10 +2,21 @@ import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 import AntropometriaForm from './AntropometriaForm';
 
-export default function Dashboard({ token, username, onLogout }) {
+export default function Dashboard({ token, username, onLogout, currentHash }) {
   const [userPayload, setUserPayload] = useState(null);
   const [role, setRole] = useState('Estudiantes');
-  const [activeTab, setActiveTab] = useState('inicio'); // 'inicio' o 'antropometria'
+  const [activeTab, setActiveTab] = useState('inicio');
+
+  // Sincronizar pestaña activa con el hash de la URL
+  useEffect(() => {
+    if (currentHash === '#/dashboard/antropometria') {
+      setActiveTab('antropometria');
+    } else if (currentHash === '#/dashboard/plan-nutricional') {
+      setActiveTab('plan');
+    } else {
+      setActiveTab('inicio');
+    }
+  }, [currentHash]);
   
   // Sensitive data visibility state
   const [showSensitiveData, setShowSensitiveData] = useState(false);
@@ -286,7 +297,7 @@ export default function Dashboard({ token, username, onLogout }) {
           {/* Menu Items */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             <button 
-              onClick={() => setActiveTab('inicio')}
+              onClick={() => { window.location.hash = '#/dashboard/inicio'; }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -308,7 +319,7 @@ export default function Dashboard({ token, username, onLogout }) {
             </button>
 
             <button 
-              onClick={() => setActiveTab('antropometria')}
+              onClick={() => { window.location.hash = '#/dashboard/antropometria'; }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -330,7 +341,7 @@ export default function Dashboard({ token, username, onLogout }) {
             </button>
 
             <button 
-              onClick={() => setActiveTab('plan')}
+              onClick={() => { window.location.hash = '#/dashboard/plan-nutricional'; }}
               style={{
                 display: 'flex',
                 alignItems: 'center',

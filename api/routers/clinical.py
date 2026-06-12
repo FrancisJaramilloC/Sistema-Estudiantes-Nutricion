@@ -15,6 +15,9 @@ class ClinicalCalculateRequest(BaseModel):
     perimetro_cintura_cm: float = Field(..., gt=0, description="Perímetro de cintura del paciente en centímetros")
     perimetro_cadera_cm: float = Field(..., gt=0, description="Perímetro de cadera del paciente en centímetros")
     sexo_biologico: str = Field(..., description="Sexo biológico del paciente: 'Masculino' o 'Femenino'")
+    edad: int = Field(..., gt=0, le=120, description="Edad del paciente en años")
+    factor_actividad: float = Field(..., description="Factor de actividad física (1.2, 1.375, 1.55, 1.725, 1.9)")
+    efecto_termogenico: float = Field(..., ge=1.0, le=10.0, description="Efecto termogénico de los alimentos en % (1-10)")
 
 class ClinicalCalculateResponse(BaseModel):
     imc: float
@@ -22,6 +25,10 @@ class ClinicalCalculateResponse(BaseModel):
     icc: float
     icc_riesgo: str
     distribucion_grasa: str
+    tmb_harris: float
+    tmb_mifflin: float
+    gasto_total_harris: float
+    gasto_total_mifflin: float
 
 @router.post("/clinical/calculate", response_model=ClinicalCalculateResponse)
 @router.post("/api/v1/clinical/calculate", response_model=ClinicalCalculateResponse)
@@ -30,9 +37,9 @@ async def calculate_clinical(
     user: dict = Depends(require_role(["Estudiantes", "Docentes"]))
 ):
     """
-    Endpoint síncrono del Motor Antropométrico protegido por rol.
-    Calcula IMC e ICC, clasifica el riesgo cardiovascular según la OMS,
-    y registra los datos de forma seudonimizada en DynamoDB (Auditoria_Planes_Table).
+    Endpoint síncrono del Motor Antropométrico y Metabólico protegido por rol.
+    Calcula IMC, ICC, TMB (Harris-Benedict y Mifflin) y Gasto Energético Total (GET),
+    e introduce los registros de forma seudonimizada en DynamoDB.
     """
     sex = req.sexo_biologico.strip().capitalize()
     if sex not in ["Masculino", "Femenino"]:
@@ -78,11 +85,36 @@ async def calculate_clinical(
             icc_riesgo = "Alto"
             distribucion_grasa = "Obesidad Androide (Manzana)"
 
+    # 3. Calcular Tasa Metabólica Basal (TMB) y Gasto Energético Total (GET)
+    estatura_cm = req.estatura_m * 100
+
+    # Fórmulas Harris-Benedict
+    if sex == "Masculino":
+        tmb_harris = 66.47 + (13.75 * req.peso_kg) + (5.0 * estatura_cm) - (6.76 * req.edad)
+    else:
+        tmb_harris = 655.10 + (9.56 * req.peso_kg) + (1.85 * estatura_cm) - (4.68 * req.edad)
+
+    # Fórmulas Mifflin
+    if sex == "Masculino":
+        tmb_mifflin = (10.0 * req.peso_kg) + (6.25 * estatura_cm) - (5.0 * req.edad) + 5.0
+    else:
+        tmb_mifflin = (10.0 * req.peso_kg) + (6.25 * estatura_cm) - (5.0 * req.edad) - 161.0
+
+    # GET = TMB * factor_actividad * (1 + efecto_termogenico / 100)
+    gasto_total_harris = (tmb_harris * req.factor_actividad) * (1.0 + (req.efecto_termogenico / 100.0))
+    gasto_total_mifflin = (tmb_mifflin * req.factor_actividad) * (1.0 + (req.efecto_termogenico / 100.0))
+
+    # Rounding results
+    tmb_harris = round(tmb_harris, 2)
+    tmb_mifflin = round(tmb_mifflin, 2)
+    gasto_total_harris = round(gasto_total_harris, 2)
+    gasto_total_mifflin = round(gasto_total_mifflin, 2)
+
     # Generar Patient_ID y Calculation_ID únicos (Seudonimización ISO 25000)
     calculation_id = str(uuid.uuid4())
     patient_id = str(uuid.uuid4())
 
-    # 3. Registrar en Auditoria_Planes_Table
+    # 4. Registrar en Auditoria_Planes_Table
     try:
         table = get_or_create_auditoria_table()
         log_item = {
@@ -93,16 +125,22 @@ async def calculate_clinical(
             "perimetro_cintura_cm": Decimal(str(req.perimetro_cintura_cm)),
             "perimetro_cadera_cm": Decimal(str(req.perimetro_cadera_cm)),
             "sexo_biologico": sex,
+            "edad": int(req.edad),
+            "factor_actividad": Decimal(str(req.factor_actividad)),
+            "efecto_termogenico": Decimal(str(req.efecto_termogenico)),
             "imc": Decimal(str(imc)),
             "imc_clasificacion": imc_clasificacion,
             "icc": Decimal(str(icc)),
             "icc_riesgo": icc_riesgo,
             "distribucion_grasa": distribucion_grasa,
+            "tmb_harris": Decimal(str(tmb_harris)),
+            "tmb_mifflin": Decimal(str(tmb_mifflin)),
+            "gasto_total_harris": Decimal(str(gasto_total_harris)),
+            "gasto_total_mifflin": Decimal(str(gasto_total_mifflin)),
             "created_at": datetime.utcnow().isoformat()
         }
         table.put_item(Item=log_item)
     except ClientError as e:
-        # No bloqueamos la respuesta en caso de error de persistencia, pero registramos el error
         print(f"Error persisting calculation in DynamoDB: {e}")
         raise HTTPException(status_code=500, detail=f"Error al guardar auditoría en base de datos: {str(e)}")
 
@@ -111,5 +149,9 @@ async def calculate_clinical(
         imc_clasificacion=imc_clasificacion,
         icc=icc,
         icc_riesgo=icc_riesgo,
-        distribucion_grasa=distribucion_grasa
+        distribucion_grasa=distribucion_grasa,
+        tmb_harris=tmb_harris,
+        tmb_mifflin=tmb_mifflin,
+        gasto_total_harris=gasto_total_harris,
+        gasto_total_mifflin=gasto_total_mifflin
     )

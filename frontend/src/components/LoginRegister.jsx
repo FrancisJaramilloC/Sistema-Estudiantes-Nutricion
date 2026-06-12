@@ -14,7 +14,6 @@ export default function LoginRegister({ onLoginSuccess }) {
   const [cedula, setCedula] = useState('');
   const [fechaNacimiento, setFechaNacimiento] = useState('');
   const [role, setRole] = useState('Estudiantes');
-  const [adminKey, setAdminKey] = useState('');
   
   // Estados de control
   const [loading, setLoading] = useState(false);
@@ -101,12 +100,6 @@ export default function LoginRegister({ onLoginSuccess }) {
         setError('Por favor, ingresa una fecha de nacimiento válida.');
         return false;
       }
-
-      // 5. Validación de Clave Docente
-      if (role === 'Docentes' && !adminKey.trim()) {
-        setError('La clave de validación del docente es obligatoria.');
-        return false;
-      }
     }
 
     // Validación de Contraseña
@@ -135,7 +128,6 @@ export default function LoginRegister({ onLoginSuccess }) {
     setError('');
     setSuccess('');
     setPassword('');
-    setAdminKey(''); // Limpiar clave docente al cambiar pestaña
   };
 
   const handleSubmit = async (e) => {
@@ -161,8 +153,7 @@ export default function LoginRegister({ onLoginSuccess }) {
           role, 
           nombre.trim(), 
           cedula.trim(), 
-          fechaNacimiento,
-          adminKey.trim()
+          fechaNacimiento
         );
         setSuccess('¡Cuenta registrada con éxito! Verifica tu correo electrónico e inicia sesión.');
         setTimeout(() => {
@@ -170,7 +161,6 @@ export default function LoginRegister({ onLoginSuccess }) {
           setError('');
           setSuccess('');
           setPassword('');
-          setAdminKey('');
         }, 4000);
       }
     } catch (err) {
@@ -323,22 +313,6 @@ export default function LoginRegister({ onLoginSuccess }) {
               <option value="Estudiantes">Estudiante</option>
               <option value="Docentes">Docente (Administrador)</option>
             </select>
-          </div>
-        )}
-
-        {/* Clave de Validación Docente (Solo Registro si el rol es Docentes) */}
-        {activeTab === 'register' && role === 'Docentes' && (
-          <div className="form-group animate-fade-in">
-            <label htmlFor="adminKey">Clave de Validación de Docente</label>
-            <input 
-              type="password" 
-              id="adminKey"
-              value={adminKey}
-              onChange={(e) => setAdminKey(e.target.value)}
-              placeholder="Ingrese la clave secreta de docente"
-              disabled={loading}
-              required
-            />
           </div>
         )}
 
