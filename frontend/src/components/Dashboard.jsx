@@ -514,10 +514,10 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
                               fontWeight: 700, 
                               padding: '2px 8px', 
                               borderRadius: '12px',
-                              background: task.status === 'COMPLETADO' ? '#ecfdf5' : '#fff7ed',
-                              color: task.status === 'COMPLETADO' ? '#047857' : '#c2410c'
+                              background: task.estado_actual === 'COMPLETADO' ? '#ecfdf5' : '#fff7ed',
+                              color: task.estado_actual === 'COMPLETADO' ? '#047857' : '#c2410c'
                             }}>
-                              {task.status}
+                              {task.estado_actual}
                             </span>
                           </div>
 

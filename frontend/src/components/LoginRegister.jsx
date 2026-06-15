@@ -171,7 +171,7 @@ export default function LoginRegister({ onLoginSuccess }) {
   };
 
   return (
-    <div className="card">
+    <div className="card auth-card">
       <h1>Sistema NutriA</h1>
       <p className="text-center" style={{ marginBottom: '24px', color: 'hsl(var(--text-muted))' }}>
         Portal de Autenticación

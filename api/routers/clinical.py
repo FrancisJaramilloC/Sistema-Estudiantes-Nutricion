@@ -31,7 +31,6 @@ class ClinicalCalculateResponse(BaseModel):
     gasto_total_mifflin: float
 
 @router.post("/clinical/calculate", response_model=ClinicalCalculateResponse)
-@router.post("/api/v1/clinical/calculate", response_model=ClinicalCalculateResponse)
 async def calculate_clinical(
     req: ClinicalCalculateRequest,
     user: dict = Depends(require_role(["Estudiantes", "Docentes"]))

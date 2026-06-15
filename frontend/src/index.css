@@ -63,6 +63,31 @@ body {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+.auth-card {
+  width: min(100%, 560px);
+  margin: 0 auto;
+}
+
+.auth-card form {
+  width: 100%;
+}
+
+.auth-card h1 {
+  font-size: clamp(2rem, 4vw, 2.35rem);
+}
+
+.auth-card .tabs-container {
+  margin-bottom: 22px;
+}
+
+.auth-card .btn {
+  margin-top: 14px;
+}
+
+.auth-card .footer-text {
+  margin-top: 22px;
+}
+
 .card:hover {
   border-color: hsla(var(--primary), 0.3);
   box-shadow: 0 20px 40px rgba(120, 110, 90, 0.08), 
@@ -291,4 +316,27 @@ select {
   max-height: 100px;
   overflow-y: auto;
   color: hsl(var(--text-secondary));
+}
+
+@media (max-width: 640px) {
+  #root {
+    padding: 14px;
+  }
+
+  .card {
+    padding: 28px 20px;
+    border-radius: 20px;
+  }
+
+  .auth-card {
+    width: 100%;
+  }
+
+  .tabs-container {
+    margin-bottom: 20px;
+  }
+
+  .form-group {
+    margin-bottom: 16px;
+  }
 }
