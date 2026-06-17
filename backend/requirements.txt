@@ -5,3 +5,4 @@ pydantic
 boto3
 pyjwt
 cryptography
+bcrypt

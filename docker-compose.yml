@@ -12,21 +12,22 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: ./api/Dockerfile
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: api_nutricion
     ports:
       - "8000:8000"
     env_file:
       - .env
     environment:
-      - DYNAMODB_ENDPOINT_URL=${DYNAMODB_ENDPOINT_URL}
+      - DYNAMODB_ENDPOINT_URL=${DYNAMODB_ENDPOINT_URL:-http://dynamodb:8000}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-2}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock}
       - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
       - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
       - COGNITO_APP_CLIENT_ID=${COGNITO_APP_CLIENT_ID}
+      - JWT_SECRET=${JWT_SECRET:-nutria-secret-key-12345}
     depends_on:
       dynamodb:
         condition: service_started

@@ -4,7 +4,7 @@ from typing import List, Optional
 class FoodItem(BaseModel):
     nombre: str
     cantidad: str
-    comida: str  # "Desayuno", "Almuerzo", "Cena", "Colacion"
+    comida: str
 
 class PlanRequest(BaseModel):
     paciente_id: str
