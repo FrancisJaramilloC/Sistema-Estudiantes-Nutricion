@@ -12,8 +12,8 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: ./backend/Dockerfile
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: api_nutricion
     ports:
       - "8000:8000"
