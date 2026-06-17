@@ -1,7 +1,7 @@
 from decimal import Decimal
 import boto3
 from botocore.exceptions import ClientError
-import config
+from app import config
 
 def get_dynamodb_resource():
     kwargs = {"region_name": config.AWS_REGION}
@@ -13,7 +13,6 @@ def get_dynamodb_resource():
         kwargs["aws_secret_access_key"] = config.AWS_SECRET_ACCESS_KEY
     if config.AWS_SESSION_TOKEN:
         kwargs["aws_session_token"] = config.AWS_SESSION_TOKEN
-        
     return boto3.resource('dynamodb', **kwargs)
 
 def get_or_create_table():
@@ -21,29 +20,15 @@ def get_or_create_table():
     table_name = "tasks"
     try:
         table = db.Table(table_name)
-        table.load()  # triggers exception if table does not exist
+        table.load()
         return table
     except ClientError as e:
         if e.response['Error']['Code'] == 'ResourceNotFoundException':
-            # Create the table
             table = db.create_table(
                 TableName=table_name,
-                KeySchema=[
-                    {
-                        'AttributeName': 'task_id',
-                        'KeyType': 'HASH'
-                    }
-                ],
-                AttributeDefinitions=[
-                    {
-                        'AttributeName': 'task_id',
-                        'AttributeType': 'S'
-                    }
-                ],
-                ProvisionedThroughput={
-                    'ReadCapacityUnits': 5,
-                    'WriteCapacityUnits': 5
-                }
+                KeySchema=[{'AttributeName': 'task_id', 'KeyType': 'HASH'}],
+                AttributeDefinitions=[{'AttributeName': 'task_id', 'AttributeType': 'S'}],
+                ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
             )
             table.wait_until_exists()
             return table
@@ -55,29 +40,15 @@ def get_or_create_auditoria_table():
     table_name = "Auditoria_Planes_Table"
     try:
         table = db.Table(table_name)
-        table.load()  # triggers exception if table does not exist
+        table.load()
         return table
     except ClientError as e:
         if e.response['Error']['Code'] == 'ResourceNotFoundException':
-            # Create the table
             table = db.create_table(
                 TableName=table_name,
-                KeySchema=[
-                    {
-                        'AttributeName': 'calculation_id',
-                        'KeyType': 'HASH'
-                    }
-                ],
-                AttributeDefinitions=[
-                    {
-                        'AttributeName': 'calculation_id',
-                        'AttributeType': 'S'
-                    }
-                ],
-                ProvisionedThroughput={
-                    'ReadCapacityUnits': 5,
-                    'WriteCapacityUnits': 5
-                }
+                KeySchema=[{'AttributeName': 'calculation_id', 'KeyType': 'HASH'}],
+                AttributeDefinitions=[{'AttributeName': 'calculation_id', 'AttributeType': 'S'}],
+                ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
             )
             table.wait_until_exists()
             return table
@@ -89,29 +60,15 @@ def get_or_create_users_table():
     table_name = "users_table"
     try:
         table = db.Table(table_name)
-        table.load()  # triggers exception if table does not exist
+        table.load()
         return table
     except ClientError as e:
         if e.response['Error']['Code'] == 'ResourceNotFoundException':
-            # Create the table
             table = db.create_table(
                 TableName=table_name,
-                KeySchema=[
-                    {
-                        'AttributeName': 'username',
-                        'KeyType': 'HASH'
-                    }
-                ],
-                AttributeDefinitions=[
-                    {
-                        'AttributeName': 'username',
-                        'AttributeType': 'S'
-                    }
-                ],
-                ProvisionedThroughput={
-                    'ReadCapacityUnits': 5,
-                    'WriteCapacityUnits': 5
-                }
+                KeySchema=[{'AttributeName': 'username', 'KeyType': 'HASH'}],
+                AttributeDefinitions=[{'AttributeName': 'username', 'AttributeType': 'S'}],
+                ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
             )
             table.wait_until_exists()
             return table
