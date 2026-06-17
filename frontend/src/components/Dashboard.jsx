@@ -8,6 +8,15 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
   const [role, setRole] = useState('Estudiantes');
   const [activeTab, setActiveTab] = useState('inicio');
   const [showSensitiveData, setShowSensitiveData] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
+
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 768) setSidebarOpen(true);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   const [pacienteId, setPacienteId] = useState('');
   const [tipoPlan, setTipoPlan] = useState('Balanceado');
@@ -143,7 +152,7 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
     setPlanLoading(true);
     try {
       const data = await apiService.createPlan(token, { paciente_id: pacienteId, tipo_plan: tipoPlan, alimentos });
-      setPlanResult(`¡Plan solicitado! Task ID: ${data.task_id}`);
+      setPlanResult('¡Plan solicitado! Estamos procesando tu solicitud...');
       setLastCreatedPlan({ task_id: data.task_id, paciente_id: pacienteId, tipo_plan: tipoPlan, alimentos: [...alimentos], estado_actual: 'PENDIENTE' });
       setPacienteId('');
       setAlimentos([]);
@@ -157,10 +166,15 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
   };
 
   return (
-    <div className="dashboard-wrapper">
-      <Sidebar username={username} role={role} userPayload={userPayload} activeTab={activeTab} onLogout={onLogout} />
+    <div className={`dashboard-wrapper ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
+      <Sidebar username={username} role={role} userPayload={userPayload} activeTab={activeTab} onLogout={onLogout} sidebarOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
 
       <div className="dashboard-main">
+        <div className="dashboard-topbar">
+          <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            ☰
+          </button>
+        </div>
         {activeTab === 'antropometria' && <AntropometriaDashboard token={token} />}
 
         {activeTab === 'inicio' && (
@@ -219,7 +233,7 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
                           <div className="task-summary">
                             <div>
                               <p className="task-patient">Paciente: {task.paciente_id || 'N/A'}</p>
-                              <p className="task-id">ID: {task.task_id.substring(0, 8)}... ({task.tipo_plan})</p>
+                              <p className="task-id">{task.tipo_plan}</p>
                             </div>
                             <span className={`task-status status-${task.estado_actual?.toLowerCase()}`}>{task.estado_actual}</span>
                           </div>
@@ -312,9 +326,21 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
                     )}
                   </div>
 
-                  <button type="submit" className="btn" disabled={planLoading || alimentos.length === 0}>
-                    {planLoading ? <div className="spinner"></div> : `Solicitar Plan (${alimentos.length} alimentos)`}
-                  </button>
+                  <div className="form-actions">
+                    <button type="submit" className="btn" disabled={planLoading || alimentos.length === 0}>
+                      {planLoading ? <div className="spinner"></div> : `Generar Plan (${alimentos.length} alimentos)`}
+                    </button>
+                    {lastCreatedPlan && (
+                      <button
+                        type="button"
+                        className="btn btn-pdf"
+                        disabled={lastCreatedPlan.estado_actual !== 'COMPLETADO'}
+                        onClick={() => apiService.downloadPlanPdf(token, lastCreatedPlan.task_id)}
+                      >
+                        Descargar PDF
+                      </button>
+                    )}
+                  </div>
                 </form>
               </div>
 
@@ -322,9 +348,11 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
                 <div className="card plan-report-card">
                   <div className="profile-header">
                     <h2>Reporte del Plan</h2>
-                    <span className={`task-status status-${lastCreatedPlan.estado_actual?.toLowerCase()}`}>{lastCreatedPlan.estado_actual}</span>
+                    <div className="report-header-actions">
+                      <span className={`task-status status-${lastCreatedPlan.estado_actual?.toLowerCase()}`}>{lastCreatedPlan.estado_actual}</span>
+                    </div>
                   </div>
-                  <p><strong>ID:</strong> {lastCreatedPlan.paciente_id}</p>
+                  <p><strong>Paciente:</strong> {lastCreatedPlan.paciente_id}</p>
                   <p><strong>Dieta:</strong> {lastCreatedPlan.tipo_plan}</p>
                   {lastCreatedPlan.alimentos?.length > 0 ? (
                     <div className="meal-report">

@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import get_or_create_table, get_or_create_auditoria_table, get_or_create_users_table
 from app.routes import health, plans, admin, auth, clinical
+from app.monitoring import SecurityMonitoringMiddleware
 
 app = FastAPI(title="NUTRIA - API Motor Antropométrico")
 
@@ -16,6 +17,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.add_middleware(SecurityMonitoringMiddleware)
 
 @app.on_event("startup")
 def startup_event():

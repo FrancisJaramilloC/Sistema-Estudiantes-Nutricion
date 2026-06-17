@@ -136,5 +136,33 @@ export const apiService = {
       throw new Error(data.detail || 'Error al obtener estado de la tarea');
     }
     return data;
+  },
+
+  /**
+   * Descarga el PDF del plan nutricional.
+   * @param {string} token
+   * @param {string} taskId
+   */
+  downloadPlanPdf: async (token, taskId) => {
+    const url = `${getBaseUrl()}/api/v1/plan/${taskId}/pdf`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.detail || 'Error al descargar PDF');
+    }
+    const blob = await response.blob();
+    const filename = response.headers.get('content-disposition')?.match(/filename="(.+)"/)?.[1] || `plan_nutricional_${taskId.slice(0, 8)}.pdf`;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
   }
 };

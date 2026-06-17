@@ -1,11 +1,13 @@
 import uuid
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi.responses import Response
 from botocore.exceptions import ClientError
 from app.models import PlanRequest
 from app.database import get_or_create_table, convert_decimals
 from app.auth import require_role
 from app.tasks import process_plan_task
+from app.pdf_generator import generar_pdf_plan
 
 router = APIRouter()
 
@@ -95,3 +97,29 @@ async def get_task_ready(
         "updated_at": task.get("updated_at"),
         "finished_at": task.get("finished_at")
     }
+
+@router.get("/plan/{task_id}/pdf")
+async def download_plan_pdf(
+    task_id: str,
+    user: dict = Depends(require_role(["Estudiantes", "Docentes"]))
+):
+    table = get_or_create_table()
+    try:
+        response = table.get_item(Key={"task_id": task_id})
+        task = response.get("Item")
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    if not task:
+        raise HTTPException(status_code=404, detail="No se encontró la tarea")
+
+    task = convert_decimals(task)
+    pdf_buf = generar_pdf_plan(task)
+    filename = f"plan_nutricional_{task_id[:8]}.pdf"
+
+    return Response(
+        content=pdf_buf.read(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        }
+    )

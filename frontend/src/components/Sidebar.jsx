@@ -1,6 +1,6 @@
 import React from 'react';
 
-export default function Sidebar({ username, role, userPayload, activeTab, onLogout }) {
+export default function Sidebar({ username, role, userPayload, activeTab, onLogout, sidebarOpen, onToggle }) {
   const menuItems = [
     { key: 'inicio', hash: '#/dashboard/inicio', icon: '🏠', label: 'Inicio' },
     { key: 'antropometria', hash: '#/dashboard/antropometria', icon: '⚖️', label: 'Antropometría' },
@@ -8,9 +8,9 @@ export default function Sidebar({ username, role, userPayload, activeTab, onLogo
   ];
 
   return (
-    <div className="sidebar">
+    <div className={`sidebar ${sidebarOpen ? '' : 'sidebar-hidden'}`}>
       <div className="sidebar-header">
-        <span className="sidebar-logo">🌿</span>
+        <img src="/nutria-logo.png" alt="NutriA" className="sidebar-logo" />
         <span className="sidebar-title">Portal NutriA</span>
       </div>
 
