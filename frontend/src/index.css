@@ -171,6 +171,21 @@ select { cursor: pointer; appearance: none; padding-right: 40px; }
   box-shadow: none;
 }
 
+.forgot-password-link {
+  text-align: center;
+  margin-top: 16px;
+  font-size: 0.85rem;
+  color: hsl(var(--primary));
+  cursor: pointer;
+  transition: color 0.2s ease;
+  user-select: none;
+}
+
+.forgot-password-link:hover {
+  color: hsl(var(--primary-hover));
+  text-decoration: underline;
+}
+
 .tabs-container {
   display: flex;
   background: rgba(120, 110, 90, 0.05);

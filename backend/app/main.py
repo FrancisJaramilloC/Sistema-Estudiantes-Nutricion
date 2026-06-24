@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import get_or_create_table, get_or_create_auditoria_table, get_or_create_users_table
+from app.database import get_or_create_table, get_or_create_auditoria_table, get_or_create_users_table, get_or_create_reset_tokens_table
 from app.routes import health, plans, admin, auth, clinical
 from app.monitoring import SecurityMonitoringMiddleware
 
@@ -25,6 +25,7 @@ def startup_event():
     get_or_create_table()
     get_or_create_auditoria_table()
     get_or_create_users_table()
+    get_or_create_reset_tokens_table()
 
 app.include_router(health.router)
 app.include_router(plans.router)
