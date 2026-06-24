@@ -1,8 +1,10 @@
 from fastapi import FastAPI
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import get_or_create_table, get_or_create_auditoria_table, get_or_create_users_table, get_or_create_reset_tokens_table
 from app.routes import health, plans, admin, auth, clinical
 from app.monitoring import SecurityMonitoringMiddleware
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 app = FastAPI(title="NUTRIA - API Motor Antropométrico")
 
@@ -19,6 +21,11 @@ app.add_middleware(
 )
 
 app.add_middleware(SecurityMonitoringMiddleware)
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics():
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 @app.on_event("startup")
 def startup_event():

@@ -6,7 +6,12 @@ from pydantic import BaseModel, Field
 from botocore.exceptions import ClientError
 from app.database import get_or_create_auditoria_table
 from app.auth import require_role
-from app.monitoring import track_clinical_performance, validate_privacy
+from app.monitoring import (
+    CLINICAL_REQUESTS_TOTAL,
+    DB_PERSISTENCE_ERRORS_TOTAL,
+    track_clinical_performance,
+    validate_privacy,
+)
 
 router = APIRouter(tags=["Clinical"])
 
@@ -126,7 +131,9 @@ async def calculate_clinical(
             validate_privacy(log_item)
 
             table.put_item(Item=log_item)
+            CLINICAL_REQUESTS_TOTAL.inc()
         except ClientError as e:
+            DB_PERSISTENCE_ERRORS_TOTAL.inc()
             print(f"Error persisting calculation in DynamoDB: {e}")
             raise HTTPException(
                 status_code=500,

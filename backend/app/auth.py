@@ -3,6 +3,7 @@ import logging
 from fastapi import HTTPException, Security, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app import config
+from app.monitoring import RBAC_DENIALS_TOTAL
 
 logger = logging.getLogger("nutria.monitoring")
 
@@ -53,6 +54,7 @@ def require_role(allowed_groups: list):
             groups = ["Estudiantes"]
         if not any(g in allowed_groups for g in groups):
             email = user.get("email", "desconocido")
+            RBAC_DENIALS_TOTAL.inc()
             logger.warning(
                 "[SECURITY ALERT] Intento de acceso no autorizado por rol "
                 "a funciones clínicas. Origen: %s",

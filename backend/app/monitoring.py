@@ -1,20 +1,23 @@
 """
-M\u00f3dulo de Monitoreo Funcional S\u00edncrono para el endpoint POST /api/v1/clinical/calculate.
+Módulo de Monitoreo Funcional Síncrono para el endpoint POST /api/v1/clinical/calculate.
 
-Implementa tres controles obligatorios seg\u00fan el Documento de Requisitos:
-  1. RNF1 - Eficiencia: Medici\u00f3n de latencia de c\u00e1lculo antropom\u00e9trico (l\u00edmite 300 ms).
-  2. RBAC - Seguridad: Detecci\u00f3n de intentos de acceso no autorizado (HTTP 403).
-  3. ISO 25000 - Privacidad: Validaci\u00f3n de seudonimizaci\u00f3n en datos de auditor\u00eda m\u00e9dica.
+Implementa tres controles obligatorios según el Documento de Requisitos:
+  1. RNF1 - Eficiencia: Medición de latencia de cálculo antropométrico (límite 300 ms).
+  2. RBAC - Seguridad: Detección de intentos de acceso no autorizado (HTTP 403).
+  3. ISO 25000 - Privacidad: Validación de seudonimización en datos de auditoría médica.
 """
 
-import time
-import jwt
 import logging
+import time
 from contextlib import contextmanager
 from typing import Any, Dict
+
+import jwt
 from fastapi import HTTPException
+from prometheus_client import Counter, Histogram
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+
 from app import config
 
 logger = logging.getLogger("nutria.monitoring")
@@ -22,15 +25,36 @@ logger.setLevel(logging.INFO)
 
 if not logger.handlers:
     handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(
-        "[%(levelname)s] %(message)s"
-    ))
+    handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
     logger.addHandler(handler)
 
 CLINICAL_PATHS = {"/clinical/calculate", "/api/v1/clinical/calculate"}
-
 FORBIDDEN_PII_FIELDS = {"nombre", "cedula", "correo"}
 
+CLINICAL_LATENCY_SECONDS = Histogram(
+    "nutria_clinical_latency_seconds",
+    "Latency of the clinical calculation pipeline in seconds",
+)
+CLINICAL_REQUESTS_TOTAL = Counter(
+    "nutria_clinical_requests_total",
+    "Total number of completed clinical calculations",
+)
+HTTP_403_TOTAL = Counter(
+    "nutria_http_403_total",
+    "Total number of HTTP 403 responses observed by the monitoring middleware",
+)
+RBAC_DENIALS_TOTAL = Counter(
+    "nutria_rbac_denials_total",
+    "Total number of role-based access denials in clinical routes",
+)
+PRIVACY_BLOCKS_TOTAL = Counter(
+    "nutria_privacy_blocks_total",
+    "Total number of blocked writes due to privacy validation failures",
+)
+DB_PERSISTENCE_ERRORS_TOTAL = Counter(
+    "nutria_db_persistence_errors_total",
+    "Total number of database persistence errors in clinical logging",
+)
 
 _jwks_client = None
 if config.COGNITO_USER_POOL_ID and not config.COGNITO_USER_POOL_ID.startswith("mock") and config.COGNITO_USER_POOL_ID != "":
@@ -52,9 +76,7 @@ def _decode_token_from_request(request: Request) -> Dict[str, Any]:
     token = auth[7:]
 
     try:
-        return jwt.decode(
-            token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM]
-        )
+        return jwt.decode(token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM])
     except Exception:
         pass
 
@@ -76,7 +98,7 @@ def _decode_token_from_request(request: Request) -> Dict[str, Any]:
 
     if token == "mock-teacher-token":
         return {"username": "docente_prueba", "cognito:groups": ["Docentes"]}
-    elif token == "mock-student-token":
+    if token == "mock-student-token":
         return {"username": "estudiante_prueba", "cognito:groups": ["Estudiantes"]}
 
     return {}
@@ -98,19 +120,18 @@ class SecurityMonitoringMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
 
         if response.status_code == 403:
+            HTTP_403_TOTAL.inc()
             payload = _decode_token_from_request(request)
             email = payload.get("email", "desconocido")
 
             if request.method == "POST" and request.url.path in CLINICAL_PATHS:
                 logger.warning(
-                    "[SECURITY ALERT] Intento de acceso no autorizado por rol "
-                    "a funciones clínicas. Origen: %s",
+                    "[SECURITY ALERT] Intento de acceso no autorizado por rol a funciones clínicas. Origen: %s",
                     email,
                 )
             else:
                 logger.warning(
-                    "[SECURITY ALERT] Acceso denegado (HTTP 403) — "
-                    "Ruta: %s %s | Origen: %s",
+                    "[SECURITY ALERT] Acceso denegado (HTTP 403) — Ruta: %s %s | Origen: %s",
                     request.method,
                     request.url.path,
                     email,
@@ -122,8 +143,8 @@ class SecurityMonitoringMiddleware(BaseHTTPMiddleware):
 @contextmanager
 def track_clinical_performance():
     """
-    Context manager que mide la latencia del bloque de c\u00e1lculos
-    antropom\u00e9tricos (IMC, ICC, TMB, GET).
+    Context manager que mide la latencia del bloque de cálculos
+    antropométricos (IMC, ICC, TMB, GET).
 
     Si la latencia supera los 300 ms, registra una alerta de rendimiento
     en los logs de Docker.
@@ -135,10 +156,10 @@ def track_clinical_performance():
         yield
     finally:
         elapsed_ms = (time.perf_counter() - start) * 1000.0
+        CLINICAL_LATENCY_SECONDS.observe(elapsed_ms / 1000.0)
         if elapsed_ms >= 300.0:
             logger.warning(
-                "[PERFORMANCE ALERT] C\u00f3mputo antropom\u00e9trico cr\u00edtico excedi\u00f3 "
-                "el l\u00edmite RNF1. Latencia: %.2f ms",
+                "[PERFORMANCE ALERT] Cómputo antropométrico crítico excedió el límite RNF1. Latencia: %.2f ms",
                 elapsed_ms,
             )
 
@@ -148,23 +169,23 @@ def validate_privacy(data: Dict[str, Any]) -> None:
     Escanea estructuralmente las llaves del diccionario ``data`` en busca
     de campos que contengan datos personales identificables del paciente.
 
-    Campos prohibidos (ISO 25000 - Seudonimizaci\u00f3n):
+    Campos prohibidos (ISO 25000 - Seudonimización):
       - 'nombre'
       - 'cedula'
       - 'correo'
 
-    Si se detecta alguno, se bloquea la escritura y se lanza una excepci\u00f3n
+    Si se detecta alguno, se bloquea la escritura y se lanza una excepción
     HTTP 400 Bad Request.
 
-    Requisito: Validador Funcional de Privacidad y Seudonimizaci\u00f3n.
+    Requisito: Validador Funcional de Privacidad y Seudonimización.
     """
     for key in data:
         if isinstance(key, str) and key.strip().lower() in FORBIDDEN_PII_FIELDS:
+            PRIVACY_BLOCKS_TOTAL.inc()
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "Violaci\u00f3n de pol\u00edtica de privacidad de datos de salud: "
-                    f"el campo '{key}' contiene datos personales identificables "
-                    "del paciente. Persistencia bloqueada."
+                    "Violación de política de privacidad de datos de salud: "
+                    f"el campo '{key}' contiene datos personales identificables del paciente. Persistencia bloqueada."
                 ),
             )

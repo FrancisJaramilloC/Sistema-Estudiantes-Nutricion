@@ -34,6 +34,21 @@ services:
     networks:
       - red_nutricional
 
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy_nutricion
+    command: ["run", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+    environment:
+      - GRAFANA_CLOUD_PROMETHEUS_URL=${GRAFANA_CLOUD_PROMETHEUS_URL}
+      - GRAFANA_CLOUD_PROMETHEUS_USER=${GRAFANA_CLOUD_PROMETHEUS_USER}
+      - GRAFANA_CLOUD_PROMETHEUS_API_KEY=${GRAFANA_CLOUD_PROMETHEUS_API_KEY}
+    depends_on:
+      - api
+    networks:
+      - red_nutricional
+
   frontend:
     build:
       context: ./frontend
