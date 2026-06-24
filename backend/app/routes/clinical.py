@@ -95,40 +95,43 @@ async def calculate_clinical(
         gasto_total_harris = round(gasto_total_harris, 2)
         gasto_total_mifflin = round(gasto_total_mifflin, 2)
 
-    calculation_id = str(uuid.uuid4())
-    patient_id = str(uuid.uuid4())
+        calculation_id = str(uuid.uuid4())
+        patient_id = str(uuid.uuid4())
 
-    try:
-        table = get_or_create_auditoria_table()
-        log_item = {
-            "calculation_id": calculation_id,
-            "patient_id": patient_id,
-            "peso_kg": Decimal(str(req.peso_kg)),
-            "estatura_m": Decimal(str(req.estatura_m)),
-            "perimetro_cintura_cm": Decimal(str(req.perimetro_cintura_cm)),
-            "perimetro_cadera_cm": Decimal(str(req.perimetro_cadera_cm)),
-            "sexo_biologico": sex,
-            "edad": int(req.edad),
-            "factor_actividad": Decimal(str(req.factor_actividad)),
-            "efecto_termogenico": Decimal(str(req.efecto_termogenico)),
-            "imc": Decimal(str(imc)),
-            "imc_clasificacion": imc_clasificacion,
-            "icc": Decimal(str(icc)),
-            "icc_riesgo": icc_riesgo,
-            "distribucion_grasa": distribucion_grasa,
-            "tmb_harris": Decimal(str(tmb_harris)),
-            "tmb_mifflin": Decimal(str(tmb_mifflin)),
-            "gasto_total_harris": Decimal(str(gasto_total_harris)),
-            "gasto_total_mifflin": Decimal(str(gasto_total_mifflin)),
-            "created_at": datetime.utcnow().isoformat()
-        }
+        try:
+            table = get_or_create_auditoria_table()
+            log_item = {
+                "calculation_id": calculation_id,
+                "patient_id": patient_id,
+                "peso_kg": Decimal(str(req.peso_kg)),
+                "estatura_m": Decimal(str(req.estatura_m)),
+                "perimetro_cintura_cm": Decimal(str(req.perimetro_cintura_cm)),
+                "perimetro_cadera_cm": Decimal(str(req.perimetro_cadera_cm)),
+                "sexo_biologico": sex,
+                "edad": int(req.edad),
+                "factor_actividad": Decimal(str(req.factor_actividad)),
+                "efecto_termogenico": Decimal(str(req.efecto_termogenico)),
+                "imc": Decimal(str(imc)),
+                "imc_clasificacion": imc_clasificacion,
+                "icc": Decimal(str(icc)),
+                "icc_riesgo": icc_riesgo,
+                "distribucion_grasa": distribucion_grasa,
+                "tmb_harris": Decimal(str(tmb_harris)),
+                "tmb_mifflin": Decimal(str(tmb_mifflin)),
+                "gasto_total_harris": Decimal(str(gasto_total_harris)),
+                "gasto_total_mifflin": Decimal(str(gasto_total_mifflin)),
+                "created_at": datetime.utcnow().isoformat()
+            }
 
-        validate_privacy(log_item)
+            validate_privacy(log_item)
 
-        table.put_item(Item=log_item)
-    except ClientError as e:
-        print(f"Error persisting calculation in DynamoDB: {e}")
-        raise HTTPException(status_code=500, detail=f"Error al guardar auditoría en base de datos: {str(e)}")
+            table.put_item(Item=log_item)
+        except ClientError as e:
+            print(f"Error persisting calculation in DynamoDB: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al guardar auditoría en base de datos: {str(e)}"
+            )
 
     return ClinicalCalculateResponse(
         imc=imc,

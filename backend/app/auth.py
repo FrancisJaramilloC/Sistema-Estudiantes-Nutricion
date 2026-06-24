@@ -1,7 +1,10 @@
 import jwt
+import logging
 from fastapi import HTTPException, Security, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app import config
+
+logger = logging.getLogger("nutria.monitoring")
 
 security = HTTPBearer()
 
@@ -49,6 +52,12 @@ def require_role(allowed_groups: list):
         if not groups:
             groups = ["Estudiantes"]
         if not any(g in allowed_groups for g in groups):
+            email = user.get("email", "desconocido")
+            logger.warning(
+                "[SECURITY ALERT] Intento de acceso no autorizado por rol "
+                "a funciones clínicas. Origen: %s",
+                email,
+            )
             raise HTTPException(
                 status_code=403,
                 detail=f"Acceso denegado. Se requiere pertenecer a uno de los grupos: {allowed_groups}"

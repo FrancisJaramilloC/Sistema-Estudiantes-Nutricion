@@ -32,39 +32,87 @@ CLINICAL_PATHS = {"/clinical/calculate", "/api/v1/clinical/calculate"}
 FORBIDDEN_PII_FIELDS = {"nombre", "cedula", "correo"}
 
 
+_jwks_client = None
+if config.COGNITO_USER_POOL_ID and not config.COGNITO_USER_POOL_ID.startswith("mock") and config.COGNITO_USER_POOL_ID != "":
+    try:
+        jwks_url = (
+            f"https://cognito-idp.{config.AWS_REGION}.amazonaws.com/"
+            f"{config.COGNITO_USER_POOL_ID}/.well-known/jwks.json"
+        )
+        _jwks_client = jwt.PyJWKClient(jwks_url)
+    except Exception:
+        _jwks_client = None
+
+
 def _decode_token_from_request(request: Request) -> Dict[str, Any]:
     """Decodifica el JWT desde el encabezado Authorization sin lanzar excepciones."""
     auth = request.headers.get("authorization", "")
     if not auth.startswith("Bearer "):
         return {}
     token = auth[7:]
+
     try:
         return jwt.decode(
             token, config.JWT_SECRET, algorithms=[config.JWT_ALGORITHM]
         )
     except Exception:
-        return {}
+        pass
+
+    if _jwks_client and config.COGNITO_USER_POOL_ID:
+        try:
+            signing_key = _jwks_client.get_signing_key_from_jwt(token)
+            return jwt.decode(
+                token,
+                signing_key.key,
+                algorithms=["RS256"],
+                audience=config.COGNITO_APP_CLIENT_ID,
+                issuer=(
+                    f"https://cognito-idp.{config.AWS_REGION}.amazonaws.com/"
+                    f"{config.COGNITO_USER_POOL_ID}"
+                ),
+            )
+        except Exception:
+            pass
+
+    if token == "mock-teacher-token":
+        return {"username": "docente_prueba", "cognito:groups": ["Docentes"]}
+    elif token == "mock-student-token":
+        return {"username": "estudiante_prueba", "cognito:groups": ["Estudiantes"]}
+
+    return {}
 
 
 class SecurityMonitoringMiddleware(BaseHTTPMiddleware):
     """
-    Middleware global que detecta respuestas HTTP 403 Forbidden sobre el
-    endpoint de c\u00e1lculo cl\u00ednico y registra una alerta de seguridad con el
-    correo electr\u00f3nico del usuario que origin\u00f3 la solicitud.
+    Middleware global que detecta respuestas HTTP 403 Forbidden y registra
+    una alerta de seguridad con el correo electrónico del usuario que originó
+    la solicitud.
 
-    Requisito: Monitoreo de Seguridad de Accesos (Control RBAC).
+    En endpoints clínicos el mensaje es específico; en el resto de rutas se
+    registra el origen y la ruta afectada.
+
+    Requisito: RF23 — Registro de Alertas de Seguridad RBAC.
     """
 
     async def dispatch(self, request: Request, call_next):
         response = await call_next(request)
 
-        if request.method == "POST" and request.url.path in CLINICAL_PATHS:
-            if response.status_code == 403:
-                payload = _decode_token_from_request(request)
-                email = payload.get("email", "desconocido")
+        if response.status_code == 403:
+            payload = _decode_token_from_request(request)
+            email = payload.get("email", "desconocido")
+
+            if request.method == "POST" and request.url.path in CLINICAL_PATHS:
                 logger.warning(
                     "[SECURITY ALERT] Intento de acceso no autorizado por rol "
-                    "a funciones cl\u00ednicas. Origen: %s",
+                    "a funciones clínicas. Origen: %s",
+                    email,
+                )
+            else:
+                logger.warning(
+                    "[SECURITY ALERT] Acceso denegado (HTTP 403) — "
+                    "Ruta: %s %s | Origen: %s",
+                    request.method,
+                    request.url.path,
                     email,
                 )
 
