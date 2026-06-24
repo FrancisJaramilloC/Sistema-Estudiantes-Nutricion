@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import LoginForm from './LoginForm';
 import RegisterForm from './RegisterForm';
+import ForgotPasswordForm from './ForgotPasswordForm';
+import ResetPasswordForm from './ResetPasswordForm';
 import { apiService } from '../services/api';
 
 function validateEcuadorianCedula(val) {
@@ -22,6 +24,8 @@ function validateEcuadorianCedula(val) {
   return digitoVerificador === digitoCalculado;
 }
 
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
+
 export default function LoginRegister({ onLoginSuccess }) {
   const [activeTab, setActiveTab] = useState('login');
   const [username, setUsername] = useState('');
@@ -34,6 +38,12 @@ export default function LoginRegister({ onLoginSuccess }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [resetUsername, setResetUsername] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
 
   const calcularEdad = (fecha) => {
     if (!fecha) return null;
@@ -60,15 +70,7 @@ export default function LoginRegister({ onLoginSuccess }) {
       if (!fechaNacimiento) { setError('La fecha de nacimiento es obligatoria.'); return false; }
       const edad = calcularEdad(fechaNacimiento);
       if (edad < 18) { setError('Debes ser mayor de 18 años.'); return false; }
-      if (!password || password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres.'); return false; }
-      const hasNumber = /\d/.test(password);
-      const hasSpecial = /[^A-Za-z0-9]/.test(password);
-      const hasUpper = /[A-Z]/.test(password);
-      const hasLower = /[a-z]/.test(password);
-      if (!hasNumber || !hasSpecial || !hasUpper || !hasLower) {
-        setError('La contraseña debe tener: mayúscula, minúscula, número y símbolo.');
-        return false;
-      }
+      if (!PASSWORD_REGEX.test(password)) { setError('La contraseña debe tener 8+ caracteres, mayúscula, minúscula, número y símbolo.'); return false; }
     }
     return true;
   };
@@ -91,13 +93,59 @@ export default function LoginRegister({ onLoginSuccess }) {
         const data = await apiService.login(username, password);
         setSuccess('¡Inicio de sesión exitoso!');
         setTimeout(() => onLoginSuccess(data.id_token, username), 1000);
-      } else {
+      } else if (activeTab === 'register') {
         await apiService.register(username, email, password, role, nombre.trim(), cedula.trim(), fechaNacimiento);
         setSuccess('¡Cuenta registrada con éxito! Inicia sesión.');
         setTimeout(() => { setActiveTab('login'); setError(''); setSuccess(''); }, 4000);
       }
     } catch (err) {
       setError(err.message || 'Ocurrió un error.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+    if (!forgotEmail.trim()) { setError('Ingresa tu correo electrónico.'); return; }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(forgotEmail.trim())) { setError('Ingresa un correo válido.'); return; }
+
+    setLoading(true);
+    try {
+      const data = await apiService.forgotPassword(forgotEmail.trim());
+      setSuccess(data.message || 'Si el correo está registrado, recibirás instrucciones.');
+      if (data.reset_token) {
+        setResetUsername(data.username || '');
+        setResetToken(data.reset_token || '');
+        setTimeout(() => setActiveTab('reset'), 1500);
+      }
+    } catch (err) {
+      setError(err.message || 'Error al solicitar recuperación.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccess('');
+
+    if (!resetUsername.trim()) { setError('Ingresa tu nombre de usuario.'); return; }
+    if (!resetToken.trim()) { setError('Ingresa el código de verificación.'); return; }
+    if (!PASSWORD_REGEX.test(resetNewPassword)) { setError('La contraseña debe tener 8+ caracteres, mayúscula, minúscula, número y símbolo.'); return; }
+    if (resetNewPassword !== resetConfirmPassword) { setError('Las contraseñas no coinciden.'); return; }
+
+    setLoading(true);
+    try {
+      const data = await apiService.resetPassword(resetUsername.trim(), resetToken.trim(), resetNewPassword);
+      setSuccess(data.message || 'Contraseña restablecida con éxito.');
+      setTimeout(() => { setActiveTab('login'); setError(''); setSuccess(''); }, 3000);
+    } catch (err) {
+      setError(err.message || 'Error al restablecer la contraseña.');
     } finally {
       setLoading(false);
     }
@@ -110,27 +158,36 @@ export default function LoginRegister({ onLoginSuccess }) {
         Portal de Autenticación
       </p>
 
-      <div className="tabs-container">
-        <button className={`tab-btn ${activeTab === 'login' ? 'active' : ''}`}
-          onClick={() => handleTabChange('login')} disabled={loading}>
-          Iniciar Sesión
-        </button>
-        <button className={`tab-btn ${activeTab === 'register' ? 'active' : ''}`}
-          onClick={() => handleTabChange('register')} disabled={loading}>
-          Registrarse
-        </button>
-      </div>
+      {activeTab !== 'forgot' && activeTab !== 'reset' && (
+        <div className="tabs-container">
+          <button className={`tab-btn ${activeTab === 'login' ? 'active' : ''}`}
+            onClick={() => handleTabChange('login')} disabled={loading}>
+            Iniciar Sesión
+          </button>
+          <button className={`tab-btn ${activeTab === 'register' ? 'active' : ''}`}
+            onClick={() => handleTabChange('register')} disabled={loading}>
+            Registrarse
+          </button>
+        </div>
+      )}
 
       {error && <div className="error-msg">{error}</div>}
       {success && <div className="success-msg">{success}</div>}
 
-      {activeTab === 'login' ? (
-        <LoginForm
-          username={username} password={password} loading={loading}
-          onUsernameChange={setUsername} onPasswordChange={setPassword}
-          onSubmit={handleSubmit}
-        />
-      ) : (
+      {activeTab === 'login' && (
+        <>
+          <LoginForm
+            username={username} password={password} loading={loading}
+            onUsernameChange={setUsername} onPasswordChange={setPassword}
+            onSubmit={handleSubmit}
+          />
+          <div className="forgot-password-link" onClick={() => handleTabChange('forgot')}>
+            ¿Olvidaste tu contraseña?
+          </div>
+        </>
+      )}
+
+      {activeTab === 'register' && (
         <RegisterForm
           nombre={nombre} cedula={cedula} username={username}
           email={email} fechaNacimiento={fechaNacimiento}
@@ -141,6 +198,29 @@ export default function LoginRegister({ onLoginSuccess }) {
           onFechaNacimientoChange={setFechaNacimiento}
           onPasswordChange={setPassword} onRoleChange={setRole}
           onSubmit={handleSubmit}
+        />
+      )}
+
+      {activeTab === 'forgot' && (
+        <ForgotPasswordForm
+          email={forgotEmail} loading={loading}
+          onEmailChange={setForgotEmail}
+          onSubmit={handleForgotPassword}
+          onBack={() => handleTabChange('login')}
+        />
+      )}
+
+      {activeTab === 'reset' && (
+        <ResetPasswordForm
+          username={resetUsername} resetToken={resetToken}
+          newPassword={resetNewPassword} confirmPassword={resetConfirmPassword}
+          loading={loading}
+          onUsernameChange={setResetUsername}
+          onResetTokenChange={setResetToken}
+          onNewPasswordChange={setResetNewPassword}
+          onConfirmPasswordChange={setResetConfirmPassword}
+          onSubmit={handleResetPassword}
+          onBack={() => handleTabChange('login')}
         />
       )}
 

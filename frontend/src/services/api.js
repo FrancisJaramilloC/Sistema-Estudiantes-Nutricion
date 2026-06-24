@@ -143,6 +143,34 @@ export const apiService = {
    * @param {string} token
    * @param {string} taskId
    */
+  forgotPassword: async (email) => {
+    const url = `${getBaseUrl()}/api/v1/auth/forgot-password`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al solicitar recuperación de contraseña');
+    }
+    return data;
+  },
+
+  resetPassword: async (username, resetToken, newPassword) => {
+    const url = `${getBaseUrl()}/api/v1/auth/reset-password`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, reset_token: resetToken, new_password: newPassword }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al restablecer la contraseña');
+    }
+    return data;
+  },
+
   downloadPlanPdf: async (token, taskId) => {
     const url = `${getBaseUrl()}/api/v1/plan/${taskId}/pdf`;
     const response = await fetch(url, {
