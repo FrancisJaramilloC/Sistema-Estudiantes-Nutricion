@@ -18,7 +18,7 @@ def get_dynamodb_resource():
 
 def get_or_create_table():
     db = get_dynamodb_resource()
-    table_name = "tasks"
+    table_name = config.TASKS_TABLE
     try:
         table = db.Table(table_name)
         table.load()  # triggers exception if table does not exist
@@ -52,7 +52,7 @@ def get_or_create_table():
 
 def get_or_create_auditoria_table():
     db = get_dynamodb_resource()
-    table_name = "Auditoria_Planes_Table"
+    table_name = config.AUDITORIA_TABLE
     try:
         table = db.Table(table_name)
         table.load()  # triggers exception if table does not exist
@@ -86,7 +86,7 @@ def get_or_create_auditoria_table():
 
 def get_or_create_users_table():
     db = get_dynamodb_resource()
-    table_name = "users_table"
+    table_name = config.USERS_TABLE
     try:
         table = db.Table(table_name)
         table.load()  # triggers exception if table does not exist

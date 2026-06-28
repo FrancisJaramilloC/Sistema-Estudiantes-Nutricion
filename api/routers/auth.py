@@ -45,7 +45,7 @@ def register(req: RegisterRequest):
     if is_local_mode():
         try:
             db = get_dynamodb_resource()
-            table = db.Table("users_table")
+            table = db.Table(config.USERS_TABLE)
             
             # Verificar si ya existe
             response = table.get_item(Key={"username": req.username})
@@ -111,7 +111,7 @@ def login(req: LoginRequest):
     if is_local_mode():
         try:
             db = get_dynamodb_resource()
-            table = db.Table("users_table")
+            table = db.Table(config.USERS_TABLE)
             
             response = table.get_item(Key={"username": req.username})
             if "Item" not in response:
