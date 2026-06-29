@@ -258,5 +258,68 @@ export const apiService = {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(link.href);
+  },
+
+  /**
+   * Registra un nuevo dispositivo ESP32 (solo Docentes).
+   * @param {string} token JWT
+   * @param {string} studentId ID del estudiante asociado
+   * @param {string} nombre Nombre del dispositivo
+   */
+  registerDevice: async (token, studentId, nombre) => {
+    const url = `${getBaseUrl()}/api/v1/devices/register`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ student_id: studentId, nombre }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al registrar dispositivo');
+    }
+    return data;
+  },
+
+  /**
+   * Obtiene el historial de lecturas cardíacas de un estudiante.
+   * @param {string} token JWT
+   * @param {string} studentId ID del estudiante
+   * @param {number} limit Cantidad máxima de lecturas
+   */
+  getHeartReadings: async (token, studentId, limit = 50) => {
+    const url = `${getBaseUrl()}/api/v1/devices/readings/${studentId}?limit=${limit}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al obtener lecturas');
+    }
+    return data;
+  },
+
+  /**
+   * Lista todos los dispositivos registrados (solo Docentes).
+   * @param {string} token JWT
+   */
+  listDevices: async (token) => {
+    const url = `${getBaseUrl()}/api/v1/devices`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al listar dispositivos');
+    }
+    return data;
   }
 };

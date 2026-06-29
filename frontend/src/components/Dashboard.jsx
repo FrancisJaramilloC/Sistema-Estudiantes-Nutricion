@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import AntropometriaDashboard from './AntropometriaDashboard';
 import UserManagement from './UserManagement';
 import AccessibilityButton from './AccessibilityButton';
+import HeartRateDashboard from './HeartRateDashboard';
 
 export default function Dashboard({ token, username, onLogout, currentHash }) {
   const [userPayload, setUserPayload] = useState(null);
@@ -50,6 +51,7 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
     if (currentHash === '#/dashboard/antropometria') setActiveTab('antropometria');
     else if (currentHash === '#/dashboard/plan-nutricional') setActiveTab('plan');
     else if (currentHash === '#/dashboard/usuarios' && role === 'Docentes') setActiveTab('usuarios');
+    else if (currentHash === '#/dashboard/ritmo-cardiaco') setActiveTab('ritmo');
     else setActiveTab('inicio');
   }, [currentHash, role]);
 
@@ -179,6 +181,7 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
           </button>
         </div>
         {activeTab === 'antropometria' && <AntropometriaDashboard token={token} />}
+        {activeTab === 'ritmo' && <HeartRateDashboard token={token} userPayload={userPayload} role={role} />}
 
         {activeTab === 'usuarios' && role === 'Docentes' && (
           <UserManagement token={token} currentUsername={username} />
