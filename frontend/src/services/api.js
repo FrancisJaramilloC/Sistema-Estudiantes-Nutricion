@@ -72,6 +72,72 @@ export const apiService = {
   },
 
   /**
+   * Obtiene la lista de usuarios (Solo Docentes)
+   * @param {string} token 
+   */
+  getAdminUsers: async (token) => {
+    const url = `${getBaseUrl()}/api/v1/admin/users`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al obtener lista de usuarios');
+    }
+    return data;
+  },
+
+  /**
+   * Elimina un usuario por su username (Solo Docentes)
+   * @param {string} token 
+   * @param {string} username 
+   */
+  deleteAdminUser: async (token, username) => {
+    const url = `${getBaseUrl()}/api/v1/admin/users/${username}`;
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al eliminar usuario');
+    }
+    return data;
+  },
+
+  /**
+   * Actualiza el rol de un usuario (Solo Docentes)
+   * @param {string} token 
+   * @param {string} username 
+   * @param {string} role "Docentes" o "Estudiantes"
+   */
+  updateAdminUserRole: async (token, username, role) => {
+    const url = `${getBaseUrl()}/api/v1/admin/users/${username}/role`;
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({ role }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al actualizar el rol del usuario');
+    }
+    return data;
+  },
+
+
+  /**
    * Solicita el cálculo de un plan nutricional
    * @param {string} token 
    * @param {object} planData 

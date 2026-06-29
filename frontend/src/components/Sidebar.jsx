@@ -7,6 +7,11 @@ export default function Sidebar({ username, role, userPayload, activeTab, onLogo
     { key: 'plan', hash: '#/dashboard/plan-nutricional', icon: '🍎', label: 'Plan Nutricional' },
   ];
 
+  if (role === 'Docentes') {
+    menuItems.push({ key: 'usuarios', hash: '#/dashboard/usuarios', icon: '👥', label: 'Gestión de Usuarios' });
+  }
+
+
   return (
     <div className={`sidebar ${sidebarOpen ? '' : 'sidebar-hidden'}`}>
       <div className="sidebar-header">

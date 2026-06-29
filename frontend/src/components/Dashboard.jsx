@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
 import Sidebar from './Sidebar';
 import AntropometriaDashboard from './AntropometriaDashboard';
+import UserManagement from './UserManagement';
 
 export default function Dashboard({ token, username, onLogout, currentHash }) {
   const [userPayload, setUserPayload] = useState(null);
@@ -47,8 +48,9 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
   useEffect(() => {
     if (currentHash === '#/dashboard/antropometria') setActiveTab('antropometria');
     else if (currentHash === '#/dashboard/plan-nutricional') setActiveTab('plan');
+    else if (currentHash === '#/dashboard/usuarios' && role === 'Docentes') setActiveTab('usuarios');
     else setActiveTab('inicio');
-  }, [currentHash]);
+  }, [currentHash, role]);
 
   useEffect(() => {
     if (token) {
@@ -177,6 +179,10 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
         </div>
         {activeTab === 'antropometria' && <AntropometriaDashboard token={token} />}
 
+        {activeTab === 'usuarios' && role === 'Docentes' && (
+          <UserManagement token={token} currentUsername={username} />
+        )}
+
         {activeTab === 'inicio' && (
           <div className="dashboard-content">
             <div className="content-header">
@@ -189,7 +195,7 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
                 <div className="profile-header">
                   <h2>Información del Usuario</h2>
                   <button onClick={() => setShowSensitiveData(!showSensitiveData)} className="toggle-data-btn">
-                    {showSensitiveData ? '🙈 Ocultar' : '👁️ Mostrar'}
+                    {showSensitiveData ? 'Ocultar Datos' : 'Mostrar Datos'}
                   </button>
                 </div>
                 <div className="profile-grid">
