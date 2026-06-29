@@ -3,6 +3,7 @@ import LoginForm from './LoginForm';
 import RegisterForm from './RegisterForm';
 import ForgotPasswordForm from './ForgotPasswordForm';
 import ResetPasswordForm from './ResetPasswordForm';
+import AccessibilityButton from './AccessibilityButton';
 import { apiService } from '../services/api';
 
 function validateEcuadorianCedula(val) {
@@ -152,6 +153,7 @@ export default function LoginRegister({ onLoginSuccess }) {
   };
 
   return (
+    <>
     <div className="card auth-card">
       <h1>Sistema NutriA</h1>
       <p className="text-center" style={{ marginBottom: '24px', color: 'hsl(var(--text-muted))' }}>
@@ -228,5 +230,7 @@ export default function LoginRegister({ onLoginSuccess }) {
         Protegido mediante autenticación segura JWT.
       </div>
     </div>
+      <AccessibilityButton />
+    </>
   );
 }

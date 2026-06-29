@@ -3,6 +3,7 @@ import { apiService } from '../services/api';
 import Sidebar from './Sidebar';
 import AntropometriaDashboard from './AntropometriaDashboard';
 import UserManagement from './UserManagement';
+import AccessibilityButton from './AccessibilityButton';
 
 export default function Dashboard({ token, username, onLogout, currentHash }) {
   const [userPayload, setUserPayload] = useState(null);
@@ -385,6 +386,7 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
           </div>
         )}
       </div>
+      <AccessibilityButton />
     </div>
   );
 }
