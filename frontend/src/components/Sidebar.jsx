@@ -5,6 +5,7 @@ export default function Sidebar({ username, role, userPayload, activeTab, onLogo
     { key: 'inicio', hash: '#/dashboard/inicio', icon: '🏠', label: 'Inicio' },
     { key: 'antropometria', hash: '#/dashboard/antropometria', icon: '⚖️', label: 'Antropometría' },
     { key: 'plan', hash: '#/dashboard/plan-nutricional', icon: '🍎', label: 'Plan Nutricional' },
+    { key: 'ritmo', hash: '#/dashboard/ritmo-cardiaco', icon: '❤️', label: 'Ritmo Cardíaco' },
   ];
 
   return (

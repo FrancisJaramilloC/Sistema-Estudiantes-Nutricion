@@ -75,6 +75,52 @@ def get_or_create_users_table():
         else:
             raise e
 
+def get_or_create_devices_table():
+    db = get_dynamodb_resource()
+    table_name = "devices"
+    try:
+        table = db.Table(table_name)
+        table.load()
+        return table
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            table = db.create_table(
+                TableName=table_name,
+                KeySchema=[{'AttributeName': 'device_id', 'KeyType': 'HASH'}],
+                AttributeDefinitions=[{'AttributeName': 'device_id', 'AttributeType': 'S'}],
+                ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
+            )
+            table.wait_until_exists()
+            return table
+        else:
+            raise e
+
+def get_or_create_heart_rate_table():
+    db = get_dynamodb_resource()
+    table_name = "heart_rate_readings"
+    try:
+        table = db.Table(table_name)
+        table.load()
+        return table
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            table = db.create_table(
+                TableName=table_name,
+                KeySchema=[
+                    {'AttributeName': 'student_id', 'KeyType': 'HASH'},
+                    {'AttributeName': 'timestamp', 'KeyType': 'RANGE'}
+                ],
+                AttributeDefinitions=[
+                    {'AttributeName': 'student_id', 'AttributeType': 'S'},
+                    {'AttributeName': 'timestamp', 'AttributeType': 'S'}
+                ],
+                ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
+            )
+            table.wait_until_exists()
+            return table
+        else:
+            raise e
+
 def convert_decimals(obj):
     if isinstance(obj, list):
         return [convert_decimals(i) for i in obj]
