@@ -2,7 +2,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 import boto3
 from botocore.exceptions import ClientError
-from app.database import get_or_create_table, convert_decimals, get_dynamodb_resource
+from app.database import get_or_create_table, convert_decimals, get_dynamodb_resource, get_or_create_audit_log_table
+from boto3.dynamodb.conditions import Attr
 from app.auth import require_role
 from app import config
 
@@ -169,3 +170,17 @@ async def update_user_role(username: str, req: UpdateUserRoleRequest, user: dict
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/admin/audit/login-events")
+async def get_login_audit_events(user: dict = Depends(require_role(["Docentes"]))):
+    """
+    Devuelve los últimos eventos de inicio de sesión (exitosos y fallidos)
+    registrados en la tabla audit_log, ordenados del más reciente al más antiguo.
+    """
+    try:
+        table = get_or_create_audit_log_table()
+        response = table.scan()
+        items = response.get("Items", [])
+        items.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        return convert_decimals(items[:50])
+    except ClientError as e:
+        raise HTTPException(status_code=500, detail=str(e))

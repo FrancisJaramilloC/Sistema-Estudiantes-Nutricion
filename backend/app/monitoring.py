@@ -56,6 +56,23 @@ DB_PERSISTENCE_ERRORS_TOTAL = Counter(
     "Total number of database persistence errors in clinical logging",
 )
 
+LOGIN_SUCCESS_TOTAL = Counter(
+    "nutria_login_success_total",
+    "Total number of successful logins",
+)
+
+def log_login_event(username: str):
+    """
+    Registra un evento de inicio de sesión exitoso.
+    Se emite como log estructurado (visible en Grafana Cloud Logs vía Loki)
+    e incrementa el contador de métricas correspondiente.
+    """
+    LOGIN_SUCCESS_TOTAL.inc()
+    logger.info(
+        "[LOGIN] Usuario autenticado exitosamente | username=%s",
+        username,
+    )
+
 _jwks_client = None
 if config.COGNITO_USER_POOL_ID and not config.COGNITO_USER_POOL_ID.startswith("mock") and config.COGNITO_USER_POOL_ID != "":
     try:

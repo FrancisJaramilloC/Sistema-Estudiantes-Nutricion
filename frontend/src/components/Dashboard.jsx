@@ -37,6 +37,9 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
   const [auditLoading, setAuditLoading] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
 
+  const [loginEvents, setLoginEvents] = useState([]);
+  const [loginAuditError, setLoginAuditError] = useState('');
+  const [loginAuditLoading, setLoginAuditLoading] = useState(false);
   const quickAddFoods = [
     { nombre: 'Huevo Cocido', cantidad: '2 unidades', comida: 'Desayuno' },
     { nombre: 'Avena con Leche', cantidad: '1 taza', comida: 'Desayuno' },
@@ -85,6 +88,27 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
       setAuditLoading(false);
     }
   };
+
+  const loadLoginAudit = async () => {
+    if (role !== 'Docentes') return;
+    setLoginAuditLoading(true);
+    setLoginAuditError('');
+    try {
+      const data = await apiService.getLoginAudit(token);
+      setLoginEvents(data || []);
+    } catch (err) {
+      setLoginAuditError(err.message || 'No autorizado para ver auditoría de accesos.');
+    } finally {
+      setLoginAuditLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (role === 'Docentes') {
+      loadAuditTasks();
+      loadLoginAudit();
+    }
+  }, [role]);
 
   useEffect(() => {
     if (role === 'Docentes') loadAuditTasks();
@@ -261,12 +285,40 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
                   )}
                 </div>
               )}
-            </div>
 
-            <details className="dev-tools">
-              <summary>🛠️ Herramientas de Desarrollador</summary>
-              <div><p>Token JWT activo:</p><div className="token-container">{token}</div></div>
-            </details>
+              {role === 'Docentes' && (
+                <div className="card audit-card">
+                  <div className="profile-header">
+                    <h2>Auditoría de Accesos</h2>
+                    <button onClick={loadLoginAudit} className="btn btn-secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: '0.8rem' }} disabled={loginAuditLoading}>
+                      Refrescar
+                    </button>
+                  </div>
+                  {loginAuditError && <div className="error-msg">{loginAuditError}</div>}
+                  {loginAuditLoading ? (
+                    <div className="spinner-container"><div className="spinner" style={{ borderColor: 'rgba(30,63,32,0.1)', borderTopColor: 'hsl(var(--primary))' }}></div></div>
+                  ) : loginEvents.length === 0 ? (
+                    <p className="empty-state">No hay eventos de acceso registrados.</p>
+                  ) : (
+                    <div className="task-list">
+                      {loginEvents.map((event) => (
+                        <div key={event.event_id} className="task-item">
+                          <div className="task-summary">
+                            <div>
+                              <p className="task-patient">{event.username}</p>
+                              <p className="task-id">{new Date(event.timestamp + 'Z').toLocaleString('es-EC')}{event.reason ? ` — ${event.reason}` : ''}</p>
+                            </div>
+                            <span className={`task-status status-${event.success ? 'completado' : 'fallido'}`}>
+                              {event.success ? 'EXITOSO' : 'FALLIDO'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -381,11 +433,6 @@ export default function Dashboard({ token, username, onLogout, currentHash }) {
                 </div>
               )}
             </div>
-
-            <details className="dev-tools">
-              <summary>🛠️ Herramientas de Desarrollador</summary>
-              <div><p>Token JWT activo:</p><div className="token-container">{token}</div></div>
-            </details>
           </div>
         )}
       </div>

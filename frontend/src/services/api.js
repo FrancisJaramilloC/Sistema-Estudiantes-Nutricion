@@ -75,7 +75,27 @@ export const apiService = {
    * Obtiene la lista de usuarios (Solo Docentes)
    * @param {string} token 
    */
-  getAdminUsers: async (token) => {
+/**
+   * Obtiene los eventos de auditoría de inicio de sesión (Solo Docentes)
+   * @param {string} token Token JWT
+   */
+  getLoginAudit: async (token) => {
+    const url = `${getBaseUrl()}/api/v1/admin/audit/login-events`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al obtener auditoría de accesos');
+    }
+    return data;
+  },
+ 
+ getAdminUsers: async (token) => {
     const url = `${getBaseUrl()}/api/v1/admin/users`;
     const response = await fetch(url, {
       method: 'GET',

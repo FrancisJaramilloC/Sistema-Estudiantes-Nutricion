@@ -7,7 +7,9 @@ import boto3
 import jwt as pyjwt
 import datetime
 from app import config
-from app.database import get_dynamodb_resource, get_or_create_reset_tokens_table
+from app.database import get_dynamodb_resource, get_or_create_reset_tokens_table, get_or_create_audit_log_table
+from app.monitoring import log_login_event
+import uuid
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -48,6 +50,24 @@ def get_cognito_client():
 
 def is_local_mode():
     return not config.COGNITO_USER_POOL_ID or config.COGNITO_USER_POOL_ID.startswith("mock") or config.COGNITO_USER_POOL_ID == ""
+
+def record_login_attempt(username: str, success: bool, reason: str = ""):
+    """
+    Registra un intento de inicio de sesión (exitoso o fallido) en la
+    tabla audit_log para su posterior visualización en el panel de auditoría.
+    """
+    try:
+        audit_table = get_or_create_audit_log_table()
+        audit_table.put_item(Item={
+            "username": username,
+            "timestamp": datetime.datetime.utcnow().isoformat(),
+            "event_id": str(uuid.uuid4()),
+            "event_type": "LOGIN_SUCCESS" if success else "LOGIN_FAILED",
+            "success": success,
+            "reason": reason
+        })
+    except Exception:
+        pass
 
 @router.post("/register", status_code=201)
 def register(req: RegisterRequest):
@@ -127,12 +147,14 @@ def login(req: LoginRequest):
 
             response = table.get_item(Key={"username": req.username})
             if "Item" not in response:
+                record_login_attempt(req.username, success=False, reason="Usuario no encontrado")
                 raise HTTPException(status_code=400, detail="Usuario o contraseña incorrectos.")
 
             user = response["Item"]
             stored_password = user["password"]
 
             if not bcrypt.checkpw(req.password.encode('utf-8'), stored_password.encode('utf-8')):
+                record_login_attempt(req.username, success=False, reason="Contraseña incorrecta")
                 raise HTTPException(status_code=400, detail="Usuario o contraseña incorrectos.")
 
             payload = {
@@ -145,7 +167,11 @@ def login(req: LoginRequest):
                 "cognito:groups": [user["role"]],
                 "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=config.JWT_EXPIRATION_HOURS)
             }
+
             token = pyjwt.encode(payload, config.JWT_SECRET, algorithm=config.JWT_ALGORITHM)
+
+            log_login_event(user["username"])
+            record_login_attempt(user["username"], success=True)
 
             return {
                 "access_token": token,
@@ -167,6 +193,7 @@ def login(req: LoginRequest):
                 'PASSWORD': req.password
             }
         )
+        log_login_event(req.username)
         return {
             "access_token": response['AuthenticationResult']['AccessToken'],
             "id_token": response['AuthenticationResult']['IdToken'],

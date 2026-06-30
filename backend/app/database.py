@@ -141,6 +141,32 @@ def get_or_create_heart_rate_table():
         else:
             raise e
 
+def get_or_create_audit_log_table():
+    db = get_dynamodb_resource()
+    table_name = "audit_log"
+    try:
+        table = db.Table(table_name)
+        table.load()
+        return table
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            table = db.create_table(
+                TableName=table_name,
+                KeySchema=[
+                    {'AttributeName': 'username', 'KeyType': 'HASH'},
+                    {'AttributeName': 'timestamp', 'KeyType': 'RANGE'}
+                ],
+                AttributeDefinitions=[
+                    {'AttributeName': 'username', 'AttributeType': 'S'},
+                    {'AttributeName': 'timestamp', 'AttributeType': 'S'}
+                ],
+                ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
+            )
+            table.wait_until_exists()
+            return table
+        else:
+            raise e
+
 def convert_decimals(obj):
     if isinstance(obj, list):
         return [convert_decimals(i) for i in obj]
