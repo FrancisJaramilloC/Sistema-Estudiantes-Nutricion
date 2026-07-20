@@ -281,36 +281,55 @@ export const apiService = {
   },
 
   /**
-   * Registra un nuevo dispositivo ESP32 (solo Docentes).
-   * @param {string} token JWT
-   * @param {string} studentId ID del estudiante asociado
-   * @param {string} nombre Nombre del dispositivo
+   * Genera un código temporal de emparejamiento para el ESP32.
+   * @param {string} token JWT del estudiante/docente autenticado
+   * @param {string} [studentId] Solo docentes: username del estudiante para quien se genera
    */
-  registerDevice: async (token, studentId, nombre) => {
-    const url = `${getBaseUrl()}/api/v1/devices/register`;
+  createPairingCode: async (token, studentId) => {
+    const url = `${getBaseUrl()}/api/v1/devices/pairing-code`;
+    const body = studentId ? { student_id: studentId } : {};
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`,
       },
-      body: JSON.stringify({ student_id: studentId, nombre }),
+      body: JSON.stringify(body),
     });
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.detail || 'Error al registrar dispositivo');
+      throw new Error(data.detail || 'Error al generar el código de emparejamiento');
     }
     return data;
   },
 
   /**
-   * Obtiene el historial de lecturas cardíacas de un estudiante.
+   * Lista los usuarios del sistema (solo Docentes). Usado para el dropdown de estudiantes.
    * @param {string} token JWT
-   * @param {string} studentId ID del estudiante
+   */
+  listUsers: async (token) => {
+    const url = `${getBaseUrl()}/api/v1/admin/users`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al listar usuarios');
+    }
+    return data;
+  },
+
+  /**
+   * Obtiene el historial de lecturas cardíacas de un dispositivo.
+   * @param {string} token JWT
+   * @param {string} deviceId ID del dispositivo
    * @param {number} limit Cantidad máxima de lecturas
    */
-  getHeartReadings: async (token, studentId, limit = 50) => {
-    const url = `${getBaseUrl()}/api/v1/devices/readings/${studentId}?limit=${limit}`;
+  getHeartReadings: async (token, deviceId, limit = 50) => {
+    const url = `${getBaseUrl()}/api/v1/devices/readings/${deviceId}?limit=${limit}`;
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -320,6 +339,25 @@ export const apiService = {
     const data = await response.json();
     if (!response.ok) {
       throw new Error(data.detail || 'Error al obtener lecturas');
+    }
+    return data;
+  },
+
+  /**
+   * Lista los dispositivos del estudiante autenticado.
+   * @param {string} token JWT
+   */
+  getMyDevices: async (token) => {
+    const url = `${getBaseUrl()}/api/v1/devices/my-devices`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.detail || 'Error al obtener dispositivos');
     }
     return data;
   },
