@@ -91,7 +91,8 @@ class FakeDynamoTable:
         if ExpressionAttributeValues:
             vals = list(ExpressionAttributeValues.values())
             if len(vals) >= 1:
-                items = [i for i in items if vals[0] in str(i.get("student_id", ""))]
+                # Support both device_id and student_id as partition keys
+                items = [i for i in items if vals[0] in str(i.get("device_id", "")) or vals[0] in str(i.get("student_id", ""))]
         items = items[:Limit]
         return {"Items": items}
 
@@ -99,7 +100,7 @@ class FakeDynamoTable:
         pass
 
     def _extract_key(self, item: dict) -> str:
-        for key_attr in ["task_id", "username", "device_id", "calculation_id", "student_id"]:
+        for key_attr in ["task_id", "username", "device_id", "calculation_id", "code", "student_id"]:
             if key_attr in item:
                 return str(item[key_attr])
         return str(id(item))

@@ -3,7 +3,8 @@ import hashlib
 import re
 import secrets
 import logging
-from datetime import datetime, timezone
+import string
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, Header
@@ -18,16 +19,18 @@ router = APIRouter(tags=["devices"])
 
 # ==================== MODELOS ====================
 
-class DeviceRegisterRequest(BaseModel):
-    student_id: str
-    nombre: str = Field(default="ESP32 Cardiaco")
+class PairingCodeRequest(BaseModel):
+    student_id: Optional[str] = Field(
+        default=None,
+        description="Solo para docentes: username del estudiante para quien se genera el código. Si se omite, el código se vincula al usuario autenticado."
+    )
 
 
-class DeviceRegisterResponse(BaseModel):
-    device_id: str
-    api_key: str
+class PairingCodeResponse(BaseModel):
+    code: str
     student_id: str
-    nombre: str
+    expires_at: str
+    ttl_seconds: int
     mensaje: str
 
 
@@ -37,7 +40,12 @@ class DeviceAutoRegisterRequest(BaseModel):
         pattern=r'^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$',
         description="Dirección MAC del dispositivo (formato XX:XX:XX:XX:XX:XX)"
     )
-    student_id: str
+    pairing_code: str = Field(
+        ...,
+        min_length=6,
+        max_length=16,
+        description="Código temporal de emparejamiento generado por el estudiante"
+    )
     nombre: str = Field(default="ESP32 Cardiaco")
 
 
@@ -135,49 +143,75 @@ async def verify_device(
 
 # ==================== ENDPOINTS ====================
 
-@router.post("/devices/register", response_model=DeviceRegisterResponse)
-def register_device(
-    req: DeviceRegisterRequest,
-    user: dict = Depends(require_role(["Docentes"]))
+@router.post("/devices/pairing-code", response_model=PairingCodeResponse)
+def create_pairing_code(
+    req: PairingCodeRequest = PairingCodeRequest(),
+    user: dict = Depends(require_role(["Estudiantes", "Docentes"]))
 ):
-    """Registra un dispositivo manualmente (docente). Genera API Key."""
+    """
+    Genera un código temporal de emparejamiento para un dispositivo ESP32.
+    - Un estudiante genera un código vinculado a sí mismo.
+    - Un docente puede indicar `student_id` para generar el código para un
+      estudiante registrado en particular.
+    El código expira tras un tiempo y es de un solo uso.
+    """
     db = get_dynamodb_resource()
-    devices_table = db.Table("devices")
+    users_table = db.Table("users_table")
+    pairing_table = db.Table("pairing_codes")
 
-    device_id = str(uuid.uuid4())
-    api_key = secrets.token_urlsafe(32)
-    key_hash = _hash_api_key(api_key)
-    now = datetime.now(timezone.utc).isoformat()
+    groups = user.get("cognito:groups", ["Estudiantes"])
+    is_teacher = "Docentes" in groups
 
-    devices_table.put_item(Item={
-        "device_id": device_id,
-        "api_key": key_hash,
-        "student_id": req.student_id,
-        "nombre": req.nombre or "ESP32 Cardiaco",
-        "activo": True,
-        "auth_type": "api_key",
-        "created_at": now
+    if is_teacher and req.student_id:
+        student_id = req.student_id.strip()
+        existing = users_table.get_item(Key={"username": student_id}).get("Item")
+        if not existing:
+            raise HTTPException(
+                status_code=404,
+                detail=f"El estudiante '{student_id}' no está registrado en el sistema."
+            )
+    else:
+        student_id = user.get("username")
+
+    if not student_id:
+        raise HTTPException(status_code=400, detail="No se pudo identificar al estudiante")
+
+    ttl_seconds = 300  # 5 minutos
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(seconds=ttl_seconds)
+
+    alphabet = string.ascii_uppercase + string.digits
+    code = "".join(secrets.choice(alphabet) for _ in range(8))
+
+    pairing_table.put_item(Item={
+        "code": code,
+        "student_id": student_id,
+        "created_at": now.isoformat(),
+        "expires_at": expires_at.isoformat(),
+        "expires_at_ttl": int(expires_at.timestamp()),
+        "used": False
     })
 
     logger.info(
-        "[DEVICE] Dispositivo registrado (API Key): %s (estudiante: %s)",
-        device_id, req.student_id
+        "[PAIRING] Código de emparejamiento generado para estudiante: %s",
+        student_id
     )
 
-    return DeviceRegisterResponse(
-        device_id=device_id,
-        api_key=api_key,
-        student_id=req.student_id,
-        nombre=req.nombre or "ESP32 Cardiaco",
-        mensaje="Dispositivo registrado exitosamente. Guarda esta API Key, no se mostrará de nuevo."
+    return PairingCodeResponse(
+        code=code,
+        student_id=student_id,
+        expires_at=expires_at.isoformat(),
+        ttl_seconds=ttl_seconds,
+        mensaje="Usa este código en el portal del ESP32. Expira en 5 minutos y es de un solo uso."
     )
 
 
 @router.post("/devices/auto-register")
 def auto_register_device(req: DeviceAutoRegisterRequest):
     """
-    Auto-registra un dispositivo usando su dirección MAC.
+    Auto-registra un dispositivo usando su dirección MAC y un código temporal.
     No requiere autenticación (es llamado por el ESP32 directamente).
+    El código de emparejamiento se invalida tras su uso.
     Es idempotente: si el dispositivo ya existe, devuelve su info.
     """
     db = get_dynamodb_resource()
@@ -201,6 +235,38 @@ def auto_register_device(req: DeviceAutoRegisterRequest):
             "mensaje": "Dispositivo ya estaba registrado."
         }
 
+    # Validar el código de emparejamiento
+    pairing_table = db.Table("pairing_codes")
+    response = pairing_table.get_item(Key={"code": req.pairing_code})
+    pairing = response.get("Item")
+
+    if not pairing:
+        raise HTTPException(
+            status_code=404,
+            detail="Código de emparejamiento inválido o inexistente."
+        )
+    if pairing.get("used", False):
+        raise HTTPException(
+            status_code=400,
+            detail="El código de emparejamiento ya fue utilizado."
+        )
+
+    expires_at = datetime.fromisoformat(pairing["expires_at"])
+    if expires_at < datetime.now(timezone.utc):
+        raise HTTPException(
+            status_code=400,
+            detail="El código de emparejamiento ha expirado."
+        )
+
+    student_id = pairing["student_id"]
+
+    # Invalidar el código (un solo uso)
+    pairing_table.update_item(
+        Key={"code": req.pairing_code},
+        UpdateExpression="SET used = :u",
+        ExpressionAttributeValues={":u": True}
+    )
+
     # Registrar nuevo dispositivo
     device_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -208,7 +274,7 @@ def auto_register_device(req: DeviceAutoRegisterRequest):
     devices_table.put_item(Item={
         "device_id": device_id,
         "mac_address": mac,
-        "student_id": req.student_id,
+        "student_id": student_id,
         "nombre": req.nombre or "ESP32 Cardiaco",
         "activo": True,
         "auth_type": "mac",
@@ -217,13 +283,13 @@ def auto_register_device(req: DeviceAutoRegisterRequest):
 
     logger.info(
         "[DEVICE] Dispositivo auto-registrado por MAC: %s (MAC: %s, estudiante: %s)",
-        device_id, mac, req.student_id
+        device_id, mac, student_id
     )
 
     return {
         "device_id": device_id,
         "mac_address": mac,
-        "student_id": req.student_id,
+        "student_id": student_id,
         "nombre": req.nombre or "ESP32 Cardiaco",
         "activo": True,
         "mensaje": "Dispositivo registrado exitosamente por MAC."
@@ -255,10 +321,10 @@ def receive_reading(
         raise HTTPException(status_code=400, detail="Formato de timestamp inválido. Use ISO 8601.")
 
     heart_table.put_item(Item={
-        "student_id": student_id,
+        "device_id": device["device_id"],
         "timestamp": reading.timestamp,
         "reading_id": reading_id,
-        "device_id": device["device_id"],
+        "student_id": student_id,
         "bpm": reading.bpm,
         "created_at": now
     })
@@ -279,9 +345,9 @@ def receive_reading(
     }
 
 
-@router.get("/devices/readings/{student_id}")
+@router.get("/devices/readings/{device_id}")
 def get_readings(
-    student_id: str,
+    device_id: str,
     limit: int = 50,
     user: dict = Depends(get_current_user)
 ):
@@ -289,15 +355,15 @@ def get_readings(
     heart_table = db.Table("heart_rate_readings")
 
     response = heart_table.query(
-        KeyConditionExpression="student_id = :sid",
-        ExpressionAttributeValues={":sid": student_id},
+        KeyConditionExpression="device_id = :did",
+        ExpressionAttributeValues={":did": device_id},
         ScanIndexForward=False,
         Limit=limit
     )
     items = response.get("Items", [])
     items = [convert_decimals(item) for item in items]
 
-    return {"readings": items, "count": len(items), "student_id": student_id}
+    return {"readings": items, "count": len(items), "device_id": device_id}
 
 
 @router.put("/devices/{device_id}/toggle")
@@ -341,6 +407,27 @@ def list_devices(user: dict = Depends(require_role(["Docentes"]))):
     devices_table = db.Table("devices")
 
     response = devices_table.scan()
+    items = response.get("Items", [])
+    items = [convert_decimals(item) for item in items]
+
+    for item in items:
+        item.pop("api_key", None)
+
+    return {"devices": items, "count": len(items)}
+
+
+@router.get("/devices/my-devices")
+def list_my_devices(user: dict = Depends(get_current_user)):
+    """Lista los dispositivos del estudiante autenticado."""
+    db = get_dynamodb_resource()
+    devices_table = db.Table("devices")
+
+    student_id = user.get("username")
+
+    response = devices_table.scan(
+        FilterExpression="student_id = :sid",
+        ExpressionAttributeValues={":sid": student_id}
+    )
     items = response.get("Items", [])
     items = [convert_decimals(item) for item in items]
 

@@ -1,26 +1,17 @@
 from fastapi import FastAPI
 from fastapi.responses import Response
-from fastapi.middleware.cors import CORSMiddleware
-from app.database import get_or_create_table, get_or_create_auditoria_table, get_or_create_users_table, get_or_create_reset_tokens_table, get_or_create_devices_table, get_or_create_heart_rate_table
+from app.database import get_or_create_table, get_or_create_auditoria_table, get_or_create_users_table, get_or_create_reset_tokens_table, get_or_create_devices_table, get_or_create_heart_rate_table, get_or_create_pairing_codes_table
 from app.routes import health, plans, admin, auth, clinical, devices
 from app.monitoring import SecurityMonitoringMiddleware
+from app.cors import PermissiveCORSMiddleware
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 app = FastAPI(title="NUTRIA - API Motor Antropométrico")
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ],
-    allow_origin_regex="https?://.*",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 app.add_middleware(SecurityMonitoringMiddleware)
+# Middleware CORS más externo: refleja el Origin en todas las respuestas,
+# incluyendo preflight OPTIONS y respuestas de error.
+app.add_middleware(PermissiveCORSMiddleware)
 
 
 @app.get("/metrics", include_in_schema=False)
@@ -35,6 +26,7 @@ def startup_event():
     get_or_create_reset_tokens_table()
     get_or_create_devices_table()
     get_or_create_heart_rate_table()
+    get_or_create_pairing_codes_table()
 
 app.include_router(health.router)
 app.include_router(plans.router)

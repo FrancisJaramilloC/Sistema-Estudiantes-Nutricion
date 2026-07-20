@@ -5,7 +5,8 @@
  * FLUJO DEL USUARIO:
  * 1. Encender el ESP32 → Si no tiene WiFi guardado, crea una red "Sensor-Ritmo-XXXX"
  * 2. Conectarse a esa red desde el celular → Se abre un portal web automáticamente
- * 3. Seleccionar la red WiFi, ingresar contraseña e ID del Estudiante
+ * 3. Seleccionar la red WiFi e ingresar el CÓDIGO TEMPORAL de emparejamiento
+ *    (generado desde el sistema por el estudiante autenticado)
  * 4. El ESP32 se conecta, se auto-registra en el backend y empieza a enviar datos
  *
  * RESET DE FÁBRICA:
@@ -32,14 +33,14 @@ bool timeInitialized = false;
 bool shouldSaveConfig = false;
 
 String deviceMac = "";
-String studentId = "";
+String pairingCode = "";
 
 // ==================== PROTOTIPOS ====================
 void checkFactoryReset();
 void setupWiFiManager();
 void saveConfigCallback();
-void loadStudentId();
-void saveStudentId(const String& id);
+void loadPairingCode();
+void savePairingCode(const String& code);
 void initNTP();
 void autoRegisterDevice();
 int generateBPM();
@@ -70,8 +71,8 @@ void setup() {
   // Verificar si se solicita reset de fábrica
   checkFactoryReset();
 
-  // Cargar student_id guardado en NVS
-  loadStudentId();
+  // Cargar pairing_code guardado en NVS
+  loadPairingCode();
 
   // Configurar e iniciar WiFiManager
   setupWiFiManager();
@@ -162,7 +163,7 @@ void checkFactoryReset() {
     Serial.println("==========================================");
     Serial.println("[RESET] ¡FACTORY RESET ACTIVADO!");
     Serial.println("[RESET] Borrando configuración WiFi...");
-    Serial.println("[RESET] Borrando ID del estudiante...");
+    Serial.println("[RESET] Borrando código de emparejamiento...");
     Serial.println("==========================================");
 
     // Borrar configuración WiFi
@@ -190,30 +191,28 @@ void saveConfigCallback() {
 }
 
 /**
- * Carga el student_id desde la memoria NVS (Preferences)
+ * Carga el pairing_code desde la memoria NVS (Preferences)
  */
-void loadStudentId() {
+void loadPairingCode() {
   preferences.begin("sensor", true); // read-only
-  studentId = preferences.getString("student_id", "");
+  pairingCode = preferences.getString("pairing_code", "");
   preferences.end();
 
-  if (studentId.length() > 0) {
-    Serial.print("[NVS] ID del Estudiante cargado: ");
-    Serial.println(studentId);
+  if (pairingCode.length() > 0) {
+    Serial.println("[NVS] Código de emparejamiento cargado.");
   } else {
-    Serial.println("[NVS] No hay ID del Estudiante guardado. Se pedirá en el Portal Cautivo.");
+    Serial.println("[NVS] No hay código de emparejamiento guardado. Se pedirá en el Portal Cautivo.");
   }
 }
 
 /**
- * Guarda el student_id en la memoria NVS (Preferences)
+ * Guarda el pairing_code en la memoria NVS (Preferences)
  */
-void saveStudentId(const String& id) {
+void savePairingCode(const String& code) {
   preferences.begin("sensor", false); // read-write
-  preferences.putString("student_id", id);
+  preferences.putString("pairing_code", code);
   preferences.end();
-  Serial.print("[NVS] ID del Estudiante guardado: ");
-  Serial.println(id);
+  Serial.println("[NVS] Código de emparejamiento guardado.");
 }
 
 /**
@@ -222,17 +221,17 @@ void saveStudentId(const String& id) {
 void setupWiFiManager() {
   Serial.println("[WIFI] Iniciando WiFiManager...");
 
-  // Crear parámetro personalizado para el ID del Estudiante
-  WiFiManagerParameter custom_student_id(
-    "student_id",              // ID del campo
-    "ID del Estudiante",       // Label que ve el usuario
-    studentId.c_str(),         // Valor por defecto (si ya había uno guardado)
-    50                         // Longitud máxima
+  // Crear parámetro personalizado para el código de emparejamiento temporal
+  WiFiManagerParameter custom_pairing_code(
+    "pairing_code",          // ID del campo
+    "Código de emparejamiento", // Label que ve el usuario
+    pairingCode.c_str(),     // Valor por defecto (si ya había uno guardado)
+    16                        // Longitud máxima
   );
 
   // Configurar WiFiManager
   wm.setSaveConfigCallback(saveConfigCallback);
-  wm.addParameter(&custom_student_id);
+  wm.addParameter(&custom_pairing_code);
   wm.setConfigPortalTimeout(CONFIG_PORTAL_TIMEOUT);
   wm.setConnectTimeout(20);
 
@@ -264,22 +263,23 @@ void setupWiFiManager() {
   Serial.print("[WIFI] RSSI: ");
   Serial.println(WiFi.RSSI());
 
-  // Guardar el student_id si se ingresó en el portal
+  // Guardar el pairing_code si se ingresó en el portal
   if (shouldSaveConfig) {
-    String newStudentId = String(custom_student_id.getValue());
-    newStudentId.trim();
+    String newPairingCode = String(custom_pairing_code.getValue());
+    newPairingCode.trim();
+    newPairingCode.toUpperCase();
 
-    if (newStudentId.length() > 0) {
-      studentId = newStudentId;
-      saveStudentId(studentId);
+    if (newPairingCode.length() > 0) {
+      pairingCode = newPairingCode;
+      savePairingCode(pairingCode);
     }
   }
 
-  // Verificar que tenemos un student_id configurado
-  if (studentId.length() == 0) {
-    Serial.println("[WARN] ¡No se ha configurado un ID del Estudiante!");
-    Serial.println("[WARN] Reseteá el dispositivo (BOOT 3s) y configura el ID.");
-    Serial.println("[WARN] Continuando sin student_id...");
+  // Verificar que tenemos un pairing_code configurado
+  if (pairingCode.length() == 0) {
+    Serial.println("[WARN] ¡No se ha configurado un código de emparejamiento!");
+    Serial.println("[WARN] Reseteá el dispositivo (BOOT 3s) y configura el código.");
+    Serial.println("[WARN] Continuando sin código de emparejamiento...");
   }
 }
 
@@ -318,16 +318,16 @@ void initNTP() {
  * Se llama una vez en el setup. Es idempotente (se puede llamar varias veces).
  */
 void autoRegisterDevice() {
-  if (studentId.length() == 0) {
-    Serial.println("[REGISTRO] Saltando auto-registro: no hay student_id configurado.");
+  if (pairingCode.length() == 0) {
+    Serial.println("[REGISTRO] Saltando auto-registro: no hay código de emparejamiento configurado.");
     return;
   }
 
   Serial.println("[REGISTRO] Auto-registrando dispositivo en el backend...");
   Serial.print("[REGISTRO] MAC: ");
   Serial.println(deviceMac);
-  Serial.print("[REGISTRO] Estudiante: ");
-  Serial.println(studentId);
+  Serial.print("[REGISTRO] Código: ");
+  Serial.println(pairingCode);
 
   HTTPClient http;
   http.begin(REGISTER_URL);
@@ -335,7 +335,7 @@ void autoRegisterDevice() {
 
   StaticJsonDocument<256> doc;
   doc["mac_address"] = deviceMac;
-  doc["student_id"] = studentId;
+  doc["pairing_code"] = pairingCode;
   doc["nombre"] = "ESP32 Cardiaco";
 
   String payload;
@@ -354,9 +354,10 @@ void autoRegisterDevice() {
     if (httpCode == 200 || httpCode == 201) {
       Serial.println("[REGISTRO] ✓ Dispositivo registrado/verificado exitosamente.");
       blinkLed(2, 200);
-    } else if (httpCode == 409) {
-      Serial.println("[REGISTRO] ✓ Dispositivo ya estaba registrado (OK).");
-      blinkLed(2, 200);
+    } else if (httpCode == 400 || httpCode == 404) {
+      Serial.println("[REGISTRO] ✗ Código de emparejamiento inválido, expirado o ya usado.");
+      Serial.println("[REGISTRO] Generá un nuevo código en el sistema y reconfigurá el dispositivo (BOOT 3s).");
+      blinkLed(3, 300);
     } else {
       Serial.print("[REGISTRO] ⚠ Respuesta inesperada: ");
       Serial.println(response);
