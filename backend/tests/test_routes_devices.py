@@ -1,5 +1,6 @@
 """
-Tests for the devices routes (register device, receive readings, list devices).
+Tests for the devices routes (register device, receive readings, list devices,
+auto-register by MAC, MAC-based readings, toggle device).
 
 Uses moto-mocked DynamoDB, mock auth tokens, and real API key verification flow.
 """
@@ -56,6 +57,76 @@ class TestRegisterDevice:
         assert resp.status_code == 401
 
 
+class TestAutoRegisterDevice:
+    """POST /devices/auto-register"""
+
+    URL = "/devices/auto-register"
+
+    def test_auto_register_new_device(self, client):
+        """A new device should be auto-registered by MAC address."""
+        resp = client.post(
+            self.URL,
+            json={
+                "mac_address": "AA:BB:CC:DD:EE:01",
+                "student_id": "student-mac-001",
+                "nombre": "ESP32 Test MAC"
+            },
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "device_id" in data
+        assert data["mac_address"] == "AA:BB:CC:DD:EE:01"
+        assert data["student_id"] == "student-mac-001"
+        assert data["activo"] is True
+
+    def test_auto_register_existing_device_idempotent(self, client):
+        """Registering the same MAC twice should return 200 both times (idempotent)."""
+        mac = "AA:BB:CC:DD:EE:02"
+        # First registration
+        resp1 = client.post(
+            self.URL,
+            json={"mac_address": mac, "student_id": "student-mac-002"},
+        )
+        assert resp1.status_code == 200
+        device_id_1 = resp1.json()["device_id"]
+
+        # Second registration (same MAC)
+        resp2 = client.post(
+            self.URL,
+            json={"mac_address": mac, "student_id": "student-mac-002"},
+        )
+        assert resp2.status_code == 200
+        device_id_2 = resp2.json()["device_id"]
+
+        # Should return the same device
+        assert device_id_1 == device_id_2
+
+    def test_auto_register_normalizes_mac_uppercase(self, client):
+        """MAC address should be normalized to uppercase."""
+        resp = client.post(
+            self.URL,
+            json={"mac_address": "aa:bb:cc:dd:ee:03", "student_id": "student-mac-003"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["mac_address"] == "AA:BB:CC:DD:EE:03"
+
+    def test_auto_register_invalid_mac_format(self, client):
+        """An invalid MAC format should return 422."""
+        resp = client.post(
+            self.URL,
+            json={"mac_address": "invalid-mac", "student_id": "student-mac-004"},
+        )
+        assert resp.status_code == 422
+
+    def test_auto_register_missing_student_id(self, client):
+        """Missing student_id should return 422."""
+        resp = client.post(
+            self.URL,
+            json={"mac_address": "AA:BB:CC:DD:EE:05"},
+        )
+        assert resp.status_code == 422
+
+
 class TestReceiveHeartRateReading:
     """POST /devices/reading"""
 
@@ -95,13 +166,13 @@ class TestReceiveHeartRateReading:
         )
         assert resp.status_code == 401
 
-    def test_receive_reading_missing_api_key(self, client):
-        """A missing API key should return 422 (FastAPI validation)."""
+    def test_receive_reading_missing_auth(self, client):
+        """No X-Api-Key and no X-Device-Mac should return 401."""
         resp = client.post(
             self.READING_URL,
             json={"bpm": 75, "timestamp": datetime.now(timezone.utc).isoformat()},
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 401
 
     def test_receive_reading_future_timestamp(self, client, auth_header_teacher):
         """A timestamp in the future should return 400."""
@@ -148,6 +219,128 @@ class TestReceiveHeartRateReading:
             headers={"X-Api-Key": api_key},
         )
         assert resp.status_code == 422
+
+
+class TestMacBasedReading:
+    """POST /devices/reading con autenticación por MAC"""
+
+    READING_URL = "/devices/reading"
+    AUTO_REG_URL = "/devices/auto-register"
+
+    def _auto_register(self, client, mac="AA:BB:CC:11:22:33", student_id="mac-reading-student"):
+        """Helper: auto-register a device by MAC."""
+        resp = client.post(
+            self.AUTO_REG_URL,
+            json={"mac_address": mac, "student_id": student_id},
+        )
+        return resp.json()
+
+    def test_receive_reading_with_mac(self, client):
+        """A registered MAC device should be able to send readings."""
+        mac = "AA:BB:CC:11:22:33"
+        self._auto_register(client, mac=mac)
+        now = datetime.now(timezone.utc).isoformat()
+        resp = client.post(
+            self.READING_URL,
+            json={"bpm": 80, "timestamp": now},
+            headers={"X-Device-Mac": mac},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["bpm"] == 80
+        assert data["student_id"] == "mac-reading-student"
+
+    def test_receive_reading_invalid_mac(self, client):
+        """An unregistered MAC should return 401."""
+        now = datetime.now(timezone.utc).isoformat()
+        resp = client.post(
+            self.READING_URL,
+            json={"bpm": 80, "timestamp": now},
+            headers={"X-Device-Mac": "FF:FF:FF:FF:FF:FF"},
+        )
+        assert resp.status_code == 401
+
+    def test_receive_reading_no_auth_at_all(self, client):
+        """No auth headers at all should return 401."""
+        now = datetime.now(timezone.utc).isoformat()
+        resp = client.post(
+            self.READING_URL,
+            json={"bpm": 80, "timestamp": now},
+        )
+        assert resp.status_code == 401
+
+    def test_api_key_still_works_after_mac_support(self, client, auth_header_teacher):
+        """Backward compat: API key auth should still work for readings."""
+        # Register device the old way
+        resp = client.post(
+            "/devices/register",
+            json={"student_id": "legacy-student"},
+            headers=auth_header_teacher,
+        )
+        api_key = resp.json()["api_key"]
+
+        # Send reading with API key
+        now = datetime.now(timezone.utc).isoformat()
+        resp = client.post(
+            self.READING_URL,
+            json={"bpm": 72, "timestamp": now},
+            headers={"X-Api-Key": api_key},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["student_id"] == "legacy-student"
+
+
+class TestToggleDevice:
+    """PUT /devices/{device_id}/toggle"""
+
+    AUTO_REG_URL = "/devices/auto-register"
+
+    def _create_device(self, client):
+        """Helper: create a device via auto-register and return device_id."""
+        resp = client.post(
+            self.AUTO_REG_URL,
+            json={"mac_address": "AA:BB:CC:DD:EE:FF", "student_id": "toggle-student"},
+        )
+        return resp.json()["device_id"]
+
+    def test_toggle_device_as_teacher(self, client, auth_header_teacher):
+        """A teacher should be able to toggle a device's active status."""
+        device_id = self._create_device(client)
+
+        # Toggle off
+        resp = client.put(
+            f"/devices/{device_id}/toggle",
+            headers=auth_header_teacher,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["activo"] is False
+
+        # Toggle on
+        resp = client.put(
+            f"/devices/{device_id}/toggle",
+            headers=auth_header_teacher,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["activo"] is True
+
+    def test_toggle_device_as_student_forbidden(self, client, auth_header_student):
+        """A student should NOT be able to toggle a device."""
+        device_id = self._create_device(client)
+        resp = client.put(
+            f"/devices/{device_id}/toggle",
+            headers=auth_header_student,
+        )
+        assert resp.status_code == 403
+
+    def test_toggle_nonexistent_device(self, client, auth_header_teacher):
+        """Toggling a nonexistent device should return 404."""
+        resp = client.put(
+            "/devices/nonexistent-device-id/toggle",
+            headers=auth_header_teacher,
+        )
+        assert resp.status_code == 404
 
 
 class TestGetReadings:
