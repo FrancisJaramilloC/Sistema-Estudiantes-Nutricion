@@ -51,6 +51,18 @@ export const apiService = {
     return data;
   },
 
+  logout: async (username) => {
+    const url = `${getBaseUrl()}/api/v1/auth/logout`;
+    try {
+      await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+    } catch {
+    }
+  },
+
   /**
    * Obtiene la lista de tareas del panel de administrador (Solo Docentes)
    * @param {string} token Token JWT
@@ -280,6 +292,27 @@ export const apiService = {
     URL.revokeObjectURL(link.href);
   },
 
+  downloadPlanPdfById: async (token, planId) => {
+    const url = `${getBaseUrl()}/api/v1/planes/${planId}/pdf`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      const data = await response.json();
+      throw new Error(data.detail || 'Error al descargar PDF');
+    }
+    const blob = await response.blob();
+    const filename = response.headers.get('content-disposition')?.match(/filename="(.+)"/)?.[1] || `plan_nutricional_${planId.slice(0, 8)}.pdf`;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(link.href);
+  },
+
   /**
    * Registra un nuevo dispositivo ESP32 (solo Docentes).
    * @param {string} token JWT
@@ -341,5 +374,170 @@ export const apiService = {
       throw new Error(data.detail || 'Error al listar dispositivos');
     }
     return data;
-  }
+  },
+
+  // ====== CATÁLOGO DE ALIMENTOS (RF9, RF12) ======
+
+  getAlimentos: async (token, buscar = '', categoria = '', limite = 50, offset = 0) => {
+    const params = new URLSearchParams();
+    if (buscar) params.append('buscar', buscar);
+    if (categoria) params.append('categoria', categoria);
+    params.append('limite', limite);
+    params.append('offset', offset);
+    const url = `${getBaseUrl()}/api/v1/alimentos?${params}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al obtener alimentos');
+    return data;
+  },
+
+  getCategoriasAlimentos: async (token) => {
+    const url = `${getBaseUrl()}/api/v1/alimentos/categorias`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al obtener categorías');
+    return data;
+  },
+
+  getAlimentoById: async (token, alimentoId) => {
+    const url = `${getBaseUrl()}/api/v1/alimentos/${alimentoId}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al obtener alimento');
+    return data;
+  },
+
+  // ====== PLANES ALIMENTICIOS (RF9, RF10, RNF2) ======
+
+  crearPlanAlimenticio: async (token, planData) => {
+    const url = `${getBaseUrl()}/api/v1/planes`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(planData),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al crear plan');
+    return data;
+  },
+
+  getPlan: async (token, planId) => {
+    const url = `${getBaseUrl()}/api/v1/planes/${planId}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al obtener plan');
+    return data;
+  },
+
+  getPlanesPaciente: async (token, pacienteId) => {
+    const url = `${getBaseUrl()}/api/v1/planes/paciente/${pacienteId}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al obtener planes del paciente');
+    return data;
+  },
+
+  calcularPorcion: async (token, alimentoId, cantidadGramos) => {
+    const url = `${getBaseUrl()}/api/v1/planes/calcular-porcion?alimento_id=${alimentoId}&cantidad_gramos=${cantidadGramos}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al calcular porción');
+    return data;
+  },
+
+  // ====== SUGERENCIA DE PLAN (RF5, RF11, RF7) ======
+
+  generarSugerencia: async (token, datosPaciente) => {
+    const url = `${getBaseUrl()}/api/v1/sugerencia/generar`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(datosPaciente),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al generar sugerencia');
+    return data;
+  },
+
+  aceptarSugerencia: async (token, sugerenciaId) => {
+    const url = `${getBaseUrl()}/api/v1/sugerencia/${sugerenciaId}/aceptar`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al aceptar sugerencia');
+    return data;
+  },
+
+  getHistorialSugerencias: async (token, pacienteId) => {
+    const url = `${getBaseUrl()}/api/v1/sugerencia/historial/${pacienteId}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al obtener historial');
+    return data;
+  },
+
+  // ====== AUDITORÍA AMPLIADA (RNF9) ======
+
+  getAuditEvents: async (token, filtros = {}) => {
+    const params = new URLSearchParams();
+    if (filtros.event_type) params.append('event_type', filtros.event_type);
+    if (filtros.usuario) params.append('usuario', filtros.usuario);
+    if (filtros.fecha_desde) params.append('fecha_desde', filtros.fecha_desde);
+    if (filtros.fecha_hasta) params.append('fecha_hasta', filtros.fecha_hasta);
+    if (filtros.limite) params.append('limite', filtros.limite);
+    const url = `${getBaseUrl()}/api/v1/admin/audit/all?${params}`;
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al obtener eventos de auditoría');
+    return data;
+  },
+
+  // ====== ADMIN: CREAR USUARIO (Seguridad) ======
+
+  adminCreateUser: async (token, userData) => {
+    const url = `${getBaseUrl()}/api/v1/admin/create-user`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify(userData),
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al crear usuario');
+    return data;
+  },
 };

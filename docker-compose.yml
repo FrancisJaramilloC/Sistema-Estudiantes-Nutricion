@@ -28,6 +28,11 @@ services:
       - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
       - COGNITO_APP_CLIENT_ID=${COGNITO_APP_CLIENT_ID}
       - JWT_SECRET=${JWT_SECRET:-nutria-secret-key-12345}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
     depends_on:
       dynamodb:
         condition: service_started

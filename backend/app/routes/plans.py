@@ -53,7 +53,7 @@ async def create_plan(
                 }
             )
         except Exception as db_err:
-            print(f"Error updating task to FAILED: {db_err}")
+            print(f"Error al actualizar tarea a FALLIDO: {db_err}")
         raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
 
 @router.get("/tasks/{task_id}")

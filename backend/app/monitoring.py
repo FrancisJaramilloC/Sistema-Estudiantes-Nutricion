@@ -33,32 +33,32 @@ FORBIDDEN_PII_FIELDS = {"nombre", "cedula", "correo"}
 
 CLINICAL_LATENCY_SECONDS = Histogram(
     "nutria_clinical_latency_seconds",
-    "Latency of the clinical calculation pipeline in seconds",
+    "Latencia del pipeline de cálculos clínicos en segundos",
 )
 CLINICAL_REQUESTS_TOTAL = Counter(
     "nutria_clinical_requests_total",
-    "Total number of completed clinical calculations",
+    "Total de cálculos clínicos completados",
 )
 HTTP_403_TOTAL = Counter(
     "nutria_http_403_total",
-    "Total number of HTTP 403 responses observed by the monitoring middleware",
+    "Total de respuestas HTTP 403 observadas por el middleware de monitoreo",
 )
 RBAC_DENIALS_TOTAL = Counter(
     "nutria_rbac_denials_total",
-    "Total number of role-based access denials in clinical routes",
+    "Total de denegaciones de acceso basado en roles en rutas clínicas",
 )
 PRIVACY_BLOCKS_TOTAL = Counter(
     "nutria_privacy_blocks_total",
-    "Total number of blocked writes due to privacy validation failures",
+    "Total de escrituras bloqueadas por fallos en validación de privacidad",
 )
 DB_PERSISTENCE_ERRORS_TOTAL = Counter(
     "nutria_db_persistence_errors_total",
-    "Total number of database persistence errors in clinical logging",
+    "Total de errores de persistencia en base de datos en registro clínico",
 )
 
 LOGIN_SUCCESS_TOTAL = Counter(
     "nutria_login_success_total",
-    "Total number of successful logins",
+    "Total de inicios de sesión exitosos",
 )
 
 def log_login_event(username: str):

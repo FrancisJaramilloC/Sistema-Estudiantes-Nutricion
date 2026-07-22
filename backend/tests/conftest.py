@@ -20,6 +20,7 @@ os.environ["AWS_ACCESS_KEY_ID"] = "testing"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 os.environ["JWT_SECRET"] = "test-secret-key-for-unit-tests"
+os.environ["SKIP_AUTO_SEED"] = "1"
 
 from app.main import app
 
@@ -86,9 +87,12 @@ class FakeDynamoTable:
     def query(self, KeyConditionExpression: str = "",
               ExpressionAttributeValues: dict = None,
               ScanIndexForward: bool = True,
-              Limit: int = 100, **kwargs):
+              Limit: int = 100, IndexName: str = None, **kwargs):
         items = list(self._items.values())
-        if ExpressionAttributeValues:
+        if IndexName == 'categoria-index' and ExpressionAttributeValues:
+            cat_val = list(ExpressionAttributeValues.values())[0]
+            items = [i for i in items if i.get("categoria") == cat_val]
+        elif ExpressionAttributeValues:
             vals = list(ExpressionAttributeValues.values())
             if len(vals) >= 1:
                 items = [i for i in items if vals[0] in str(i.get("student_id", ""))]
@@ -99,7 +103,8 @@ class FakeDynamoTable:
         pass
 
     def _extract_key(self, item: dict) -> str:
-        for key_attr in ["task_id", "username", "device_id", "calculation_id", "student_id"]:
+        for key_attr in ["sugerencia_id", "plan_id", "task_id", "username", "device_id",
+                         "calculation_id", "student_id", "id"]:
             if key_attr in item:
                 return str(item[key_attr])
         return str(id(item))

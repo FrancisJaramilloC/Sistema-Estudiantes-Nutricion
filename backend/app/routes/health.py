@@ -4,4 +4,4 @@ router = APIRouter()
 
 @router.get("/")
 async def health_check():
-    return {"status": "online", "service": "nutria-api"}
+    return {"status": "en_linea", "service": "nutria-api"}

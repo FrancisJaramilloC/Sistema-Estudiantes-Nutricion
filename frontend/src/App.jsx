@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import LoginRegister from './components/LoginRegister';
 import Dashboard from './components/Dashboard';
+import { apiService } from './services/api';
 
 function App() {
   const [token, setToken] = useState(null);
@@ -81,6 +82,7 @@ function App() {
   };
 
   const handleLogout = () => {
+    apiService.logout(username);
     setToken(null);
     setUsername('');
     localStorage.removeItem('nutria_token');

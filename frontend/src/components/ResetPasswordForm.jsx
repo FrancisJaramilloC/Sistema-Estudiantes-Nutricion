@@ -10,7 +10,9 @@ export default function ResetPasswordForm({
   return (
     <form onSubmit={onSubmit}>
       <p style={{ marginBottom: '20px', color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>
-        Ingresa tu nombre de usuario, el código de verificación y tu nueva contraseña.
+        {resetToken
+          ? 'Ingresa tu nueva contraseña a continuación.'
+          : 'Revisa tu correo electrónico para obtener el código de verificación, luego completa los campos abaixo.'}
       </p>
 
       <div className="form-group">

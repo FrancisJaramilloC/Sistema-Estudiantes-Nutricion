@@ -9,6 +9,8 @@ import datetime
 from app import config
 from app.database import get_dynamodb_resource, get_or_create_reset_tokens_table, get_or_create_audit_log_table
 from app.monitoring import log_login_event
+from app.audit import log_audit_event
+from app.services.email_service import is_smtp_configured, send_reset_email
 import uuid
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -71,6 +73,15 @@ def record_login_attempt(username: str, success: bool, reason: str = ""):
 
 @router.post("/register", status_code=201)
 def register(req: RegisterRequest):
+    """
+    Registro público de usuarios. 
+    SEGURIDAD: Solo permite crear cuentas con rol "Estudiantes".
+    El rol "Docentes" solo puede ser asignado por un administrador
+    autenticado vía el endpoint POST /admin/create-user (RF - Seguridad).
+    """
+    # SEGURIDAD: Forzar rol Estudiantes en registro público
+    forced_role = UserRole.ESTUDIANTES
+
     if is_local_mode():
         try:
             db = get_dynamodb_resource()
@@ -100,13 +111,13 @@ def register(req: RegisterRequest):
                 "username": req.username,
                 "email": req.email,
                 "password": hashed_password.decode('utf-8'),
-                "role": req.role.value,
+                "role": forced_role.value,
                 "nombre": req.nombre,
                 "cedula": req.cedula,
                 "fecha_nacimiento": req.fecha_nacimiento
             })
 
-            return {"message": f"Usuario '{req.username}' registrado localmente y asignado al rol '{req.role.value}' con éxito."}
+            return {"message": f"Usuario '{req.username}' registrado con éxito. Rol asignado: Estudiante de Nutrición."}
         except Exception as e:
             if isinstance(e, HTTPException):
                 raise e
@@ -132,9 +143,9 @@ def register(req: RegisterRequest):
         client.admin_add_user_to_group(
             UserPoolId=config.COGNITO_USER_POOL_ID,
             Username=req.username,
-            GroupName=req.role.value
+            GroupName=forced_role.value
         )
-        return {"message": f"Usuario '{req.username}' registrado, verificado y asignado al grupo '{req.role.value}' con éxito."}
+        return {"message": f"Usuario '{req.username}' registrado. Rol asignado: Estudiante de Nutrición."}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -215,7 +226,9 @@ def forgot_password(req: ForgotPasswordRequest):
             )
             items = response.get("Items", [])
             if not items:
-                raise HTTPException(status_code=404, detail="No existe una cuenta asociada a ese correo.")
+                return {
+                    "message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña."
+                }
 
             user = items[0]
             username = user["username"]
@@ -229,6 +242,24 @@ def forgot_password(req: ForgotPasswordRequest):
                 "reset_token": reset_token,
                 "expires_at": expires_at
             })
+
+            log_audit_event(
+                actor_id=username,
+                accion="FORGOT_PASSWORD",
+                entidad="auth",
+                entidad_id=username,
+                resultado="exito",
+                detalle=f"Solicitud de restablecimiento para {req.email}",
+            )
+
+            email_sent = False
+            if is_smtp_configured():
+                email_sent = send_reset_email(req.email, username, reset_token)
+
+            if email_sent:
+                return {
+                    "message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña."
+                }
 
             return {
                 "message": "Si el correo está registrado, recibirás un enlace para restablecer tu contraseña.",
@@ -270,11 +301,27 @@ def reset_password(req: ResetPasswordRequest):
             expires_at = token_response["Item"]["expires_at"]
 
             if stored_token != req.reset_token:
+                log_audit_event(
+                    actor_id=req.username,
+                    accion="RESET_PASSWORD",
+                    entidad="auth",
+                    entidad_id=req.username,
+                    resultado="fallo",
+                    detalle="Código de restablecimiento inválido",
+                )
                 raise HTTPException(status_code=400, detail="El código de restablecimiento no es válido.")
 
             expires = datetime.datetime.fromisoformat(expires_at)
             if datetime.datetime.utcnow() > expires:
                 reset_table.delete_item(Key={"username": req.username})
+                log_audit_event(
+                    actor_id=req.username,
+                    accion="RESET_PASSWORD",
+                    entidad="auth",
+                    entidad_id=req.username,
+                    resultado="fallo",
+                    detalle="Código de restablecimiento expirado",
+                )
                 raise HTTPException(status_code=400, detail="El código de restablecimiento ha expirado. Solicita uno nuevo.")
 
             hashed_password = bcrypt.hashpw(req.new_password.encode('utf-8'), bcrypt.gensalt())
@@ -286,6 +333,15 @@ def reset_password(req: ResetPasswordRequest):
             )
 
             reset_table.delete_item(Key={"username": req.username})
+
+            log_audit_event(
+                actor_id=req.username,
+                accion="RESET_PASSWORD",
+                entidad="auth",
+                entidad_id=req.username,
+                resultado="exito",
+                detalle="Contraseña restablecida exitosamente",
+            )
 
             return {"message": "Contraseña restablecida con éxito. Ya puedes iniciar sesión."}
         except Exception as e:
@@ -304,3 +360,22 @@ def reset_password(req: ResetPasswordRequest):
         return {"message": "Contraseña restablecida con éxito. Ya puedes iniciar sesión."}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+class LogoutRequest(BaseModel):
+    username: str
+
+@router.post("/logout")
+def logout(req: LogoutRequest):
+    try:
+        log_audit_event(
+            actor_id=req.username,
+            accion="LOGOUT",
+            entidad="auth",
+            entidad_id=req.username,
+            resultado="exito",
+            detalle="Sesión cerrada por el usuario",
+        )
+        record_login_attempt(req.username, success=True, reason="LOGOUT")
+        return {"message": "Sesión cerrada."}
+    except Exception:
+        return {"message": "Sesión cerrada."}

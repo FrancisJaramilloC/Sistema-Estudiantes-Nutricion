@@ -32,9 +32,9 @@ function calcularEdad(fechaNacimiento) {
 }
 
 export default function RegisterForm({
-  nombre, cedula, username, email, fechaNacimiento, password, role, loading, esMayorEdad,
+  nombre, cedula, username, email, fechaNacimiento, password, loading, esMayorEdad,
   onNombreChange, onCedulaChange, onUsernameChange, onEmailChange,
-  onFechaNacimientoChange, onPasswordChange, onRoleChange, onSubmit,
+  onFechaNacimientoChange, onPasswordChange, onSubmit,
 }) {
   const cedulaValida = cedula.length === 10 ? validateEcuadorianCedula(cedula) : null;
 
@@ -166,20 +166,6 @@ export default function RegisterForm({
         <span className="field-hint">
           Debe incluir: 8+ caracteres, mayúscula, minúscula, número y un símbolo.
         </span>
-      </div>
-
-      <div className="form-group">
-        <label htmlFor="reg-role">Rol en el Sistema</label>
-        <select
-          id="reg-role"
-          value={role}
-          onChange={(e) => onRoleChange(e.target.value)}
-          disabled={loading}
-          required
-        >
-          <option value="Estudiantes">Estudiante</option>
-          <option value="Docentes">Docente (Administrador)</option>
-        </select>
       </div>
 
       <button type="submit" className="btn" disabled={esBloqueado}>

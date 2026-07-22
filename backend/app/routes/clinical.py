@@ -134,7 +134,7 @@ async def calculate_clinical(
             CLINICAL_REQUESTS_TOTAL.inc()
         except ClientError as e:
             DB_PERSISTENCE_ERRORS_TOTAL.inc()
-            print(f"Error persisting calculation in DynamoDB: {e}")
+            print(f"Error al persistir cálculo en DynamoDB: {e}")
             raise HTTPException(
                 status_code=500,
                 detail=f"Error al guardar auditoría en base de datos: {str(e)}"

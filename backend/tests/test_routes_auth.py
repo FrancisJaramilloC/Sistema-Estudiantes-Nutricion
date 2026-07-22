@@ -180,9 +180,12 @@ class TestForgotPassword:
         assert data["username"] == "fp_user"
 
     def test_forgot_password_nonexistent_email(self, client):
-        """Requesting a reset for an unknown email should return 404."""
+        """Requesting a reset for an unknown email should return 200 with generic message (no user enumeration)."""
         resp = client.post(self.FORGOT_URL, json={"email": "nobody@test.com"})
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "message" in data
+        assert "reset_token" not in data
 
     def test_forgot_token_stored(self, client):
         """The reset token should be stored and retrievable."""

@@ -95,7 +95,7 @@ export default function LoginRegister({ onLoginSuccess }) {
         setSuccess('¡Inicio de sesión exitoso!');
         setTimeout(() => onLoginSuccess(data.id_token, username), 1000);
       } else if (activeTab === 'register') {
-        await apiService.register(username, email, password, role, nombre.trim(), cedula.trim(), fechaNacimiento);
+        await apiService.register(username, email, password, 'Estudiantes', nombre.trim(), cedula.trim(), fechaNacimiento);
         setSuccess('¡Cuenta registrada con éxito! Inicia sesión.');
         setTimeout(() => { setActiveTab('login'); setError(''); setSuccess(''); }, 4000);
       }
@@ -121,6 +121,10 @@ export default function LoginRegister({ onLoginSuccess }) {
       if (data.reset_token) {
         setResetUsername(data.username || '');
         setResetToken(data.reset_token || '');
+        setTimeout(() => setActiveTab('reset'), 1500);
+      } else {
+        setResetUsername('');
+        setResetToken('');
         setTimeout(() => setActiveTab('reset'), 1500);
       }
     } catch (err) {
@@ -193,12 +197,12 @@ export default function LoginRegister({ onLoginSuccess }) {
         <RegisterForm
           nombre={nombre} cedula={cedula} username={username}
           email={email} fechaNacimiento={fechaNacimiento}
-          password={password} role={role} loading={loading}
+          password={password} loading={loading}
           esMayorEdad={esMayorEdad}
           onNombreChange={setNombre} onCedulaChange={setCedula}
           onUsernameChange={setUsername} onEmailChange={setEmail}
           onFechaNacimientoChange={setFechaNacimiento}
-          onPasswordChange={setPassword} onRoleChange={setRole}
+          onPasswordChange={setPassword}
           onSubmit={handleSubmit}
         />
       )}

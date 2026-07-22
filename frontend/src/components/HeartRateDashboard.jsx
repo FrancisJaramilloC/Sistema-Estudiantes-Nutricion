@@ -45,7 +45,7 @@ function RegisterDeviceForm({ token, onRegistered }) {
   const copyToClipboard = () => {
     if (apiKeyResult?.api_key) {
       navigator.clipboard.writeText(apiKeyResult.api_key)
-        .then(() => alert('API Key copiada al portapapeles'))
+        .then(() => alert('Clave de API copiada al portapapeles'))
         .catch(() => alert('No se pudo copiar. Selecciona la clave manualmente.'));
     }
   };
@@ -83,7 +83,7 @@ function RegisterDeviceForm({ token, onRegistered }) {
         </div>
         <div className="form-actions" style={{ marginTop: '12px' }}>
           <button type="submit" className="btn" disabled={loading || !studentId.trim()}>
-            {loading ? <div className="spinner"></div> : 'Generar API Key'}
+            {loading ? <div className="spinner"></div> : 'Generar Clave de API'}
           </button>
         </div>
       </form>
@@ -93,7 +93,7 @@ function RegisterDeviceForm({ token, onRegistered }) {
       {apiKeyResult && (
         <div className="hr-api-key-box">
           <p className="hr-api-key-label">
-            ⚠️ API Key generada para <strong>{apiKeyResult.nombre}</strong>
+            ⚠️ Clave de API generada para <strong>{apiKeyResult.nombre}</strong>
           </p>
           <div className="hr-api-key-value">{apiKeyResult.api_key}</div>
           <p className="hr-api-key-warning">
@@ -273,7 +273,7 @@ export default function HeartRateDashboard({ token, userPayload, role }) {
                 checked={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.checked)}
               />
-              Auto-actualizar cada 10s
+              Actualizar automáticamente cada 10s
             </label>
             {lastRefresh && (
               <span className="hr-last-refresh">Última actualización: {lastRefresh}</span>
@@ -326,8 +326,8 @@ export default function HeartRateDashboard({ token, userPayload, role }) {
       <details className="dev-tools">
         <summary>🛠️ Información del Dispositivo</summary>
         <div className="hr-device-info">
-          <p><strong>Endpoint:</strong> POST /api/v1/devices/reading</p>
-          <p><strong>Autenticación:</strong> Header X-Api-Key</p>
+          <p><strong>Ruta:</strong> POST /api/v1/devices/reading</p>
+          <p><strong>Autenticación:</strong> Encabezado X-Api-Key</p>
           <p><strong>Formato:</strong> {'{"bpm": 72, "timestamp": "2026-06-28T10:30:00Z"}'}</p>
           <p><strong>Rango BPM:</strong> 30 - 220</p>
         </div>

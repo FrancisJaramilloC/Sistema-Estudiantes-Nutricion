@@ -4,12 +4,13 @@ export default function Sidebar({ username, role, userPayload, activeTab, onLogo
   const menuItems = [
     { key: 'inicio', hash: '#/dashboard/inicio', icon: '🏠', label: 'Inicio' },
     { key: 'antropometria', hash: '#/dashboard/antropometria', icon: '⚖️', label: 'Antropometría' },
-    { key: 'plan', hash: '#/dashboard/plan-nutricional', icon: '🍎', label: 'Plan Nutricional' },
+    { key: 'plan', hash: '#/dashboard/plan-nutricional', icon: '🍎', label: 'Plan y Catálogo' },
     { key: 'ritmo', hash: '#/dashboard/ritmo-cardiaco', icon: '❤️', label: 'Ritmo Cardíaco' },
   ];
 
   if (role === 'Docentes') {
     menuItems.push({ key: 'usuarios', hash: '#/dashboard/usuarios', icon: '👥', label: 'Gestión de Usuarios' });
+    menuItems.push({ key: 'auditoria', hash: '#/dashboard/auditoria', icon: '📊', label: 'Auditoría' });
   }
 
 

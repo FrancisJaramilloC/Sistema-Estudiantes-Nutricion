@@ -9,7 +9,7 @@ class TestHealthCheck:
         response = client.get("/")
         assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "online"
+        assert data["status"] == "en_linea"
         assert data["service"] == "nutria-api"
 
     def test_health_is_fast(self, client):
