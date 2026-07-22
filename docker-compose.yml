@@ -1,4 +1,4 @@
-version: '3.8'
+
 
 services:
   dynamodb:
@@ -12,24 +12,48 @@ services:
 
   api:
     build:
-      context: .
-      dockerfile: ./api/Dockerfile
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: api_nutricion
     ports:
       - "8000:8000"
     env_file:
       - .env
     environment:
-      - DYNAMODB_ENDPOINT_URL=${DYNAMODB_ENDPOINT_URL}
+      - DYNAMODB_ENDPOINT_URL=${DYNAMODB_ENDPOINT_URL:-http://dynamodb:8000}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-2}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-mock}
       - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
       - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
       - COGNITO_APP_CLIENT_ID=${COGNITO_APP_CLIENT_ID}
+      - JWT_SECRET=${JWT_SECRET:-nutria-secret-key-12345}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASS=${SMTP_PASS}
+      - SMTP_FROM=${SMTP_FROM}
     depends_on:
       dynamodb:
         condition: service_started
+    networks:
+      - red_nutricional
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy_nutricion
+    command: ["run", "/etc/alloy/config.alloy"]
+    volumes:
+      - ./observability/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - GRAFANA_CLOUD_PROMETHEUS_URL=${GRAFANA_CLOUD_PROMETHEUS_URL}
+      - GRAFANA_CLOUD_PROMETHEUS_USER=${GRAFANA_CLOUD_PROMETHEUS_USER}
+      - GRAFANA_CLOUD_PROMETHEUS_API_KEY=${GRAFANA_CLOUD_PROMETHEUS_API_KEY}
+      - GRAFANA_CLOUD_LOKI_URL=${GRAFANA_CLOUD_LOKI_URL}
+      - GRAFANA_CLOUD_LOKI_USER=${GRAFANA_CLOUD_LOKI_USER}
+    depends_on:
+      - api
     networks:
       - red_nutricional
 
@@ -48,5 +72,3 @@ services:
 networks:
   red_nutricional:
     driver: bridge
-
-

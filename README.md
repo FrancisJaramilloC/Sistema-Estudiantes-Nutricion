@@ -1,4 +1,4 @@
-# Sistema Nutricional NutriA (FastAPI + AWS Cognito + AWS DynamoDB + React SPA)
+    # Sistema Nutricional NutriA (FastAPI + AWS Cognito + AWS DynamoDB + React SPA)
 
 Este proyecto es una plataforma integral para nutrición y salud clínica orientada a la **Gestión de Expedientes Clínicos y el Motor de Cálculo Antropométrico Síncrono** (v1.0). El sistema implementa las mejores prácticas en seguridad (RBAC) y privacidad de datos de salud bajo estándares internacionales (ISO 25000).
 

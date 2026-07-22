@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+python-dotenv
+pydantic
+boto3
+pyjwt
+cryptography
+bcrypt
+fpdf2
+prometheus-client
+
+# Testing
+pytest>=7.0
+pytest-asyncio
+httpx
+moto>=4.0
+freezegun

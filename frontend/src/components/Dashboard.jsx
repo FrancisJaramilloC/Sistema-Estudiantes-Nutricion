@@ -1,53 +1,65 @@
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../services/api';
-import AntropometriaForm from './AntropometriaForm';
+import Sidebar from './Sidebar';
+import AntropometriaDashboard from './AntropometriaDashboard';
+import UserManagement from './UserManagement';
+import AccessibilityButton from './AccessibilityButton';
+import HeartRateDashboard from './HeartRateDashboard';
+import PlanAlimenticio from './PlanAlimenticio';
+import AuditoriaPanel from './AuditoriaPanel';
 
-export default function Dashboard({ token, username, onLogout }) {
+export default function Dashboard({ token, username, onLogout, currentHash }) {
   const [userPayload, setUserPayload] = useState(null);
   const [role, setRole] = useState('Estudiantes');
-  
-  // Estados para formulario de plan (Estudiantes/Docentes)
-  const [pacienteId, setPacienteId] = useState('');
-  const [tipoPlan, setTipoPlan] = useState('Balanceado');
-  const [planResult, setPlanResult] = useState('');
-  const [planError, setPlanError] = useState('');
-  const [planLoading, setPlanLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('inicio');
+  const [showSensitiveData, setShowSensitiveData] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
 
-  // Estados para auditoría (Solo Docentes)
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 768) setSidebarOpen(true);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [tasks, setTasks] = useState([]);
   const [auditError, setAuditError] = useState('');
   const [auditLoading, setAuditLoading] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
 
-  // Decodificar el token JWT al montar el componente
+  const [loginEvents, setLoginEvents] = useState([]);
+  const [loginAuditError, setLoginAuditError] = useState('');
+  const [loginAuditLoading, setLoginAuditLoading] = useState(false);
+
+  useEffect(() => {
+    if (currentHash === '#/dashboard/antropometria') setActiveTab('antropometria');
+    else if (currentHash === '#/dashboard/plan-nutricional') setActiveTab('plan');
+    else if (currentHash === '#/dashboard/usuarios' && role === 'Docentes') setActiveTab('usuarios');
+    else if (currentHash === '#/dashboard/auditoria' && role === 'Docentes') setActiveTab('auditoria');
+    else if (currentHash === '#/dashboard/ritmo-cardiaco') setActiveTab('ritmo');
+    else setActiveTab('inicio');
+  }, [currentHash, role]);
+
   useEffect(() => {
     if (token) {
       try {
         const base64Url = token.split('.')[1];
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const jsonPayload = decodeURIComponent(
-          window.atob(base64)
-            .split('')
-            .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-            .join('')
+          window.atob(base64).split('').map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
         );
         const payload = JSON.parse(jsonPayload);
         setUserPayload(payload);
-        
-        // Obtener rol
-        const groups = payload['cognito:groups'] || [];
-        if (groups.includes('Docentes')) {
-          setRole('Docentes');
-        } else {
-          setRole('Estudiantes');
-        }
+        setRole(payload['cognito:groups']?.includes('Docentes') ? 'Docentes' : 'Estudiantes');
       } catch (e) {
         console.error('Error decodificando token', e);
       }
     }
   }, [token]);
 
-  // Cargar tareas de auditoría si el usuario es Docente
   const loadAuditTasks = async () => {
+    if (role !== 'Docentes') return;
     setAuditLoading(true);
     setAuditError('');
     try {
@@ -60,233 +72,192 @@ export default function Dashboard({ token, username, onLogout }) {
     }
   };
 
+  const loadLoginAudit = async () => {
+    if (role !== 'Docentes') return;
+    setLoginAuditLoading(true);
+    setLoginAuditError('');
+    try {
+      const data = await apiService.getLoginAudit(token);
+      setLoginEvents(data || []);
+    } catch (err) {
+      setLoginAuditError(err.message || 'No autorizado para ver auditoría de accesos.');
+    } finally {
+      setLoginAuditLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (role === 'Docentes') {
       loadAuditTasks();
+      loadLoginAudit();
     }
   }, [role]);
 
-  const handleRequestPlan = async (e) => {
-    e.preventDefault();
-    setPlanResult('');
-    setPlanError('');
-    
-    if (!pacienteId.trim()) {
-      setPlanError('Debe ingresar un ID de paciente.');
-      return;
-    }
+  useEffect(() => {
+    if (role === 'Docentes') loadAuditTasks();
+  }, [role]);
 
-    setPlanLoading(true);
-    try {
-      const data = await apiService.createPlan(token, {
-        paciente_id: pacienteId,
-        tipo_plan: tipoPlan
-      });
-      setPlanResult(`¡Plan solicitado! Task ID: ${data.task_id} (Estado: ${data.status})`);
-      setPacienteId('');
-      
-      // Si es docente, refrescar la lista de tareas automáticamente
-      if (role === 'Docentes') {
-        setTimeout(loadAuditTasks, 1500);
-      }
-    } catch (err) {
-      setPlanError(err.message || 'Error al solicitar el plan nutricional.');
-    } finally {
-      setPlanLoading(false);
+  const maskText = (text, type) => {
+    if (!text) return 'Cargando...';
+    if (showSensitiveData) return text;
+    switch (type) {
+      case 'name':
+        return text.split(' ').map(part => {
+          if (part.length <= 2) return part;
+          return part[0] + '•'.repeat(part.length - 2) + part[part.length - 1];
+        }).join(' ');
+      case 'cedula':
+        if (text.length <= 6) return '••••••';
+        return text.substring(0, 3) + '•'.repeat(text.length - 6) + text.substring(text.length - 3);
+      case 'birthdate':
+        return text.replace(/-(\d{2})-(\d{2})$/, '-••-••');
+      case 'email':
+        const parts = text.split('@');
+        if (parts.length < 2) return text;
+        const user = parts[0];
+        const domain = parts[1];
+        if (user.length <= 2) return '••@' + domain;
+        return user.substring(0, 2) + '•'.repeat(user.length - 2) + '@' + domain;
+      default:
+        return '••••••••';
     }
   };
 
   return (
-    <div className="card" style={{ maxWidth: '600px', width: '100%' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h1 style={{ fontSize: '1.8rem', textAlign: 'left', margin: 0 }}>Panel NutriA</h1>
-        <button onClick={onLogout} className="btn btn-secondary" style={{ width: 'auto', marginTop: 0, padding: '8px 16px' }}>
-          Salir
-        </button>
-      </div>
+    <div className={`dashboard-wrapper ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
+      <Sidebar username={username} role={role} userPayload={userPayload} activeTab={activeTab} onLogout={onLogout} sidebarOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
 
-      {/* Información del Usuario (Demostración de Persistencia en AWS Cognito) */}
-      <div style={{ 
-        background: 'rgba(16, 185, 129, 0.03)', 
-        border: '1px solid rgba(16, 185, 129, 0.2)', 
-        borderRadius: '12px', 
-        padding: '20px', 
-        marginBottom: '24px' 
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-          <span style={{ color: 'hsl(var(--primary))', fontSize: '1.2rem' }}>✓</span>
-          <strong style={{ fontSize: '0.95rem', color: 'hsl(var(--primary))' }}>
-            Datos Recuperados de AWS Cognito (Persistido en Nube)
-          </strong>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 20px', fontSize: '0.85rem' }}>
-          <div>
-            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.75rem', textTransform: 'uppercase' }}>Nombre Completo</p>
-            <p style={{ fontWeight: 500, color: 'hsl(var(--text-primary))' }}>{userPayload?.name || 'Cargando...'}</p>
-          </div>
-          <div>
-            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.75rem', textTransform: 'uppercase' }}>Cédula de Identidad</p>
-            <p style={{ fontWeight: 500, color: 'hsl(var(--text-primary))' }}>{userPayload?.profile || 'Cargando...'}</p>
-          </div>
-          <div>
-            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.75rem', textTransform: 'uppercase' }}>Fecha de Nacimiento</p>
-            <p style={{ fontWeight: 500, color: 'hsl(var(--text-primary))' }}>{userPayload?.birthdate || 'Cargando...'}</p>
-          </div>
-          <div>
-            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.75rem', textTransform: 'uppercase' }}>Correo Electrónico</p>
-            <p style={{ fontWeight: 500, color: 'hsl(var(--text-primary))' }}>{userPayload?.email || 'Cargando...'}</p>
-          </div>
-          <div>
-            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.75rem', textTransform: 'uppercase' }}>Nombre de Usuario</p>
-            <p style={{ fontWeight: 500, color: 'hsl(var(--text-primary))' }}>{username}</p>
-          </div>
-          <div>
-            <p style={{ color: 'hsl(var(--text-muted))', fontSize: '0.75rem', textTransform: 'uppercase' }}>Rol Asignado en Nube</p>
-            <strong style={{ color: role === 'Docentes' ? '#34d399' : '#60a5fa' }}>{role}</strong>
-          </div>
-        </div>
-      </div>
-
-      {/* Motor de Cálculo Antropométrico (Solo Estudiantes) */}
-      {role === 'Estudiantes' && (
-        <AntropometriaForm token={token} />
-      )}
-
-      {/* Formulario de Solicitud de Plan */}
-      <div style={{ marginBottom: '30px' }}>
-        <h2 style={{ fontSize: '1.2rem', textAlign: 'left', marginBottom: '16px', color: 'hsl(var(--text-primary))' }}>
-          Generar Plan Nutricional
-        </h2>
-        {planError && <div className="error-msg">{planError}</div>}
-        {planResult && <div className="success-msg">{planResult}</div>}
-        
-        <form onSubmit={handleRequestPlan} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label htmlFor="pacienteId">Identificación del Paciente</label>
-            <input 
-              type="text" 
-              id="pacienteId"
-              value={pacienteId}
-              onChange={(e) => setPacienteId(e.target.value)}
-              placeholder="ej. PAC-983"
-              disabled={planLoading}
-              required
-            />
-          </div>
-
-          <div className="form-group" style={{ marginBottom: 0 }}>
-            <label htmlFor="tipoPlan">Tipo de Plan Nutricional</label>
-            <select 
-              id="tipoPlan"
-              value={tipoPlan}
-              onChange={(e) => setTipoPlan(e.target.value)}
-              disabled={planLoading}
-              required
-            >
-              <option value="Balanceado">Balanceado</option>
-              <option value="Keto (Cetogénico)">Keto (Cetogénico)</option>
-              <option value="Vegano">Vegano</option>
-              <option value="Hiperproteico">Hiperproteico</option>
-            </select>
-          </div>
-
-          <button type="submit" className="btn" disabled={planLoading}>
-            {planLoading ? <div className="spinner"></div> : 'Solicitar Plan Nutricional'}
+      <div className="dashboard-main">
+        <div className="dashboard-topbar">
+          <button className="hamburger-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            ☰
           </button>
-        </form>
-      </div>
+        </div>
+        {activeTab === 'antropometria' && <AntropometriaDashboard token={token} />}
+        {activeTab === 'plan' && <PlanAlimenticio token={token} />}
+        {activeTab === 'ritmo' && <HeartRateDashboard token={token} userPayload={userPayload} role={role} />}
 
-      {/* Historial de Auditoría (Solo para Docentes) */}
-      {role === 'Docentes' ? (
-        <div style={{ 
-          borderTop: '1px solid hsl(var(--card-border))', 
-          paddingTop: '20px' 
-        }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-            <h2 style={{ fontSize: '1.2rem', textAlign: 'left', margin: 0, color: 'hsl(var(--text-primary))' }}>
-              Auditoría de Tareas (DynamoDB)
-            </h2>
-            <button 
-              onClick={loadAuditTasks} 
-              className="btn btn-secondary" 
-              style={{ width: 'auto', marginTop: 0, padding: '4px 10px', fontSize: '0.8rem' }}
-              disabled={auditLoading}
-            >
-              Refrescar
-            </button>
-          </div>
+        {activeTab === 'usuarios' && role === 'Docentes' && (
+          <UserManagement token={token} currentUsername={username} />
+        )}
 
-          {auditError && <div className="error-msg">{auditError}</div>}
+        {activeTab === 'auditoria' && role === 'Docentes' && (
+          <AuditoriaPanel token={token} />
+        )}
 
-          {auditLoading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}>
-              <div className="spinner" style={{ borderColor: 'rgba(255,255,255,0.1)', borderTopColor: 'hsl(var(--primary))' }}></div>
+        {activeTab === 'inicio' && (
+          <div className="dashboard-content">
+            <div className="content-header">
+              <h1>Panel de Control NutriA</h1>
+              <p>Gestiona tu información de perfil y accede a los reportes de auditoría.</p>
             </div>
-          ) : tasks.length === 0 ? (
-            <p style={{ textAlign: 'center', color: 'hsl(var(--text-muted))', padding: '16px 0' }}>
-              No hay tareas registradas en la base de datos.
-            </p>
-          ) : (
-            <div style={{ 
-              maxHeight: '200px', 
-              overflowY: 'auto', 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: '8px',
-              paddingRight: '4px'
-            }}>
-              {tasks.map((task) => (
-                <div key={task.task_id} style={{ 
-                  background: 'rgba(10, 13, 20, 0.4)', 
-                  border: '1px solid hsl(var(--card-border))', 
-                  borderRadius: '8px', 
-                  padding: '10px 12px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center'
-                }}>
-                  <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', marginRight: '8px' }}>
-                    <p style={{ fontSize: '0.8rem', fontWeight: 600 }}>Paciente: {task.paciente_id || 'N/A'}</p>
-                    <p style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '2px' }}>
-                      ID: {task.task_id.substring(0, 8)}...
-                    </p>
-                  </div>
-                  <span style={{ 
-                    fontSize: '0.75rem', 
-                    fontWeight: 600, 
-                    padding: '3px 8px', 
-                    borderRadius: '20px',
-                    background: task.status === 'COMPLETADO' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                    color: task.status === 'COMPLETADO' ? '#34d399' : '#fbbf24',
-                    border: task.status === 'COMPLETADO' ? '1px solid rgba(16, 185, 129, 0.2)' : '1px solid rgba(245, 158, 11, 0.2)'
-                  }}>
-                    {task.status}
-                  </span>
+
+            <div className="dashboard-grid">
+              <div className="card profile-card">
+                <div className="profile-header">
+                  <h2>Información del Usuario</h2>
+                  <button onClick={() => setShowSensitiveData(!showSensitiveData)} className="toggle-data-btn">
+                    {showSensitiveData ? 'Ocultar Datos' : 'Mostrar Datos'}
+                  </button>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <div style={{ 
-          borderTop: '1px solid hsl(var(--card-border))', 
-          paddingTop: '20px',
-          textAlign: 'center',
-          color: 'hsl(var(--text-muted))',
-          fontSize: '0.85rem'
-        }}>
-          💡 Panel de auditoría de DynamoDB disponible solo para cuentas con rol de **Docente**.
-        </div>
-      )}
+                <div className="profile-grid">
+                  <div>
+                    <span className="profile-label">Nombre Completo</span>
+                    <p className="profile-value">{maskText(userPayload?.name, 'name')}</p>
+                  </div>
+                  <div>
+                    <span className="profile-label">Cédula</span>
+                    <p className="profile-value">{maskText(userPayload?.profile, 'cedula')}</p>
+                  </div>
+                  <div>
+                    <span className="profile-label">Fecha de Nacimiento</span>
+                    <p className="profile-value">{maskText(userPayload?.birthdate, 'birthdate')}</p>
+                  </div>
+                  <div>
+                    <span className="profile-label">Correo Electrónico</span>
+                    <p className="profile-value">{maskText(userPayload?.email, 'email')}</p>
+                  </div>
+                </div>
+              </div>
 
-      {/* Mostrar Token para Depuración / Evaluación del Profesor */}
-      <div style={{ marginTop: '24px' }}>
-        <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginBottom: '8px' }}>
-          Token JWT activo (para pruebas en Swagger / Postman):
-        </p>
-        <div className="token-container">{token}</div>
+              {role === 'Docentes' && (
+                <div className="card audit-card">
+                  <div className="profile-header">
+                    <h2>Auditoría de Planes</h2>
+                    <button onClick={loadAuditTasks} className="btn btn-secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: '0.8rem' }} disabled={auditLoading}>
+                      Refrescar
+                    </button>
+                  </div>
+                  {auditError && <div className="error-msg">{auditError}</div>}
+                  {auditLoading ? (
+                    <div className="spinner-container"><div className="spinner" style={{ borderColor: 'rgba(30,63,32,0.1)', borderTopColor: 'hsl(var(--primary))' }}></div></div>
+                  ) : tasks.length === 0 ? (
+                    <p className="empty-state">No hay tareas registradas.</p>
+                  ) : (
+                    <div className="task-list">
+                      {tasks.map((task) => (
+                        <div key={task.task_id} onClick={() => setSelectedTask(selectedTask?.task_id === task.task_id ? null : task)}
+                          className={`task-item ${selectedTask?.task_id === task.task_id ? 'task-selected' : ''}`}>
+                          <div className="task-summary">
+                            <div>
+                              <p className="task-patient">Paciente: {task.paciente_id || 'N/A'}</p>
+                              <p className="task-id">{task.tipo_plan}</p>
+                            </div>
+                            <span className={`task-status status-${task.estado_actual?.toLowerCase()}`}>{task.estado_actual}</span>
+                          </div>
+                          {selectedTask?.task_id === task.task_id && (
+                            <div className="task-detail">
+                              <p><strong>Creado:</strong> {task.created_at || 'N/A'}</p>
+                              {task.alimentos?.length > 0 ? (
+                                <ul>{task.alimentos.map((al, i) => <li key={i}>{al.nombre} ({al.cantidad}) - {al.comida}</li>)}</ul>
+                              ) : <p className="empty-state">Sin alimentos.</p>}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {role === 'Docentes' && (
+                <div className="card audit-card">
+                  <div className="profile-header">
+                    <h2>Auditoría de Accesos</h2>
+                    <button onClick={loadLoginAudit} className="btn btn-secondary" style={{ width: 'auto', padding: '4px 10px', fontSize: '0.8rem' }} disabled={loginAuditLoading}>
+                      Refrescar
+                    </button>
+                  </div>
+                  {loginAuditError && <div className="error-msg">{loginAuditError}</div>}
+                  {loginAuditLoading ? (
+                    <div className="spinner-container"><div className="spinner" style={{ borderColor: 'rgba(30,63,32,0.1)', borderTopColor: 'hsl(var(--primary))' }}></div></div>
+                  ) : loginEvents.length === 0 ? (
+                    <p className="empty-state">No hay eventos de acceso registrados.</p>
+                  ) : (
+                    <div className="task-list">
+                      {loginEvents.map((event) => (
+                        <div key={event.event_id} className="task-item">
+                          <div className="task-summary">
+                            <div>
+                              <p className="task-patient">{event.username}</p>
+                              <p className="task-id">{new Date(event.timestamp + 'Z').toLocaleString('es-EC')}{event.reason ? ` — ${event.reason}` : ''}</p>
+                            </div>
+                            <span className={`task-status status-${event.success ? 'completado' : 'fallido'}`}>
+                              {event.success ? 'EXITOSO' : 'FALLIDO'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
+      <AccessibilityButton />
     </div>
   );
 }
