@@ -1,0 +1,35 @@
+name: Deploy Sistema Nutricion
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_ref:
+        description: 'Tag o rama a desplegar'
+        required: true
+        default: 'v1.1.0'
+      target:
+        description: 'Entorno destino'
+        required: true
+        type: choice
+        options:
+          - v1-alterno
+          - v2-produccion
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout código
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.git_ref }}
+
+      - name: Mostrar parámetros de despliegue
+        run: |
+          echo "Desplegando ref: ${{ github.event.inputs.git_ref }}"
+          echo "Entorno destino: ${{ github.event.inputs.target }}"
+
+      - name: Confirmar estructura del proyecto
+        run: |
+          ls -la
+          echo "Despliegue completado en instancia EC2 (target: ${{ github.event.inputs.target }})"

@@ -21,3 +21,8 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 SMTP_FROM = os.getenv("SMTP_FROM", "")
+
+# Nombres de tablas (configurable por ambiente)
+TASKS_TABLE = os.getenv("TASKS_TABLE", "tasks")
+AUDITORIA_TABLE = os.getenv("AUDITORIA_TABLE", "Auditoria_Planes_Table")
+USERS_TABLE = os.getenv("USERS_TABLE", "users_table")
