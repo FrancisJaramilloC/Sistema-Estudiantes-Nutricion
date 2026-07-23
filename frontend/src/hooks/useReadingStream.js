@@ -7,6 +7,7 @@ export function useReadingStream(token, deviceId) {
   const [liveReadings, setLiveReadings] = useState([]);
   const [isLive, setIsLive] = useState(false);
   const [error, setError] = useState(null);
+  const [status, setStatus] = useState('inactivo');
   const cleanupRef = useRef(null);
 
   const addReading = useCallback((reading) => {
@@ -24,19 +25,26 @@ export function useReadingStream(token, deviceId) {
 
     setIsLive(false);
     setError(null);
+    setStatus('iniciando');
     setLiveReadings([]);
 
     const cleanup = createReadingStream(token, deviceId, {
       onReading: (data) => {
         addReading(data);
         setIsLive(true);
+        setStatus('recibiendo');
       },
       onError: (msg) => {
         setError(msg);
         setIsLive(false);
+        setStatus('error');
       },
       onDisconnect: () => {
         setIsLive(false);
+        setStatus('desconectado');
+      },
+      onStatus: (msg) => {
+        setStatus(msg);
       },
     });
 
@@ -46,5 +54,5 @@ export function useReadingStream(token, deviceId) {
 
   const latestReading = liveReadings.length > 0 ? liveReadings[liveReadings.length - 1] : null;
 
-  return { liveReadings, latestReading, isLive, error };
+  return { liveReadings, latestReading, isLive, error, status };
 }

@@ -4,7 +4,7 @@ from app.database import get_or_create_table, get_or_create_auditoria_table, get
 from app.routes import health, plans, admin, auth, clinical, devices, sessions
 from app.monitoring import SecurityMonitoringMiddleware
 from app.cors import PermissiveCORSMiddleware
-from app.mqtt_handler import start_mqtt_client, stop_mqtt_client, sync_all_devices_to_mosquitto
+from app.mqtt_handler import start_mqtt_client, stop_mqtt_client, sync_all_devices_to_mosquitto, set_main_loop
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 app = FastAPI(title="NUTRIA - API Motor Antropométrico")
@@ -19,6 +19,8 @@ def metrics():
 
 @app.on_event("startup")
 def startup_event():
+    import asyncio
+    set_main_loop(asyncio.get_event_loop())
     get_or_create_table()
     get_or_create_auditoria_table()
     get_or_create_users_table()
@@ -45,5 +47,5 @@ app.include_router(plans.router, prefix="/api/v1")
 app.include_router(admin.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(clinical.router, prefix="/api/v1")
-app.include_router(devices.router, prefix="/api/v1")
 app.include_router(sessions.router, prefix="/api/v1")
+app.include_router(devices.router, prefix="/api/v1")

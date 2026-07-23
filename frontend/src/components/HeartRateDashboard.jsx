@@ -152,7 +152,7 @@ export default function HeartRateDashboard({ token, userPayload, role }) {
   const [error, setError] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const { liveReadings, latestReading, isLive } = useReadingStream(token, selectedDeviceId);
+  const { liveReadings, latestReading, isLive, error: sseError, status: sseStatus } = useReadingStream(token, selectedDeviceId);
   const { sessions, currentSession, loading: sessionsLoading, refresh: refreshSessions } = useSessions(token, selectedDeviceId);
 
   useEffect(() => {
@@ -192,6 +192,16 @@ export default function HeartRateDashboard({ token, userPayload, role }) {
       setSelectedSession(null);
     }
   }, [selectedDeviceId, fetchRawReadings]);
+
+  const POLL_INTERVAL = 5000;
+  useEffect(() => {
+    if (!selectedDeviceId) return;
+    const id = setInterval(() => {
+      fetchRawReadings();
+      refreshSessions();
+    }, POLL_INTERVAL);
+    return () => clearInterval(id);
+  }, [selectedDeviceId, fetchRawReadings, refreshSessions]);
 
   const handleDeviceRegistered = () => {
     setRefreshKey((k) => k + 1);
@@ -275,6 +285,16 @@ export default function HeartRateDashboard({ token, userPayload, role }) {
               <div className="session-detail-card">
                 <MedicalAlerts session={displaySession} />
               </div>
+            </div>
+          )}
+
+          {selectedDeviceId && (
+            <div className="card" style={{ padding: '8px 16px', marginBottom: '12px', fontSize: '0.85rem' }}>
+              <strong>SSE:</strong>{' '}
+              <span style={{ color: isLive ? '#22c55e' : sseError ? '#ef4444' : '#f59e0b' }}>
+                {sseStatus}
+              </span>
+              {sseError && <span style={{ color: '#ef4444', marginLeft: '8px' }}>({sseError})</span>}
             </div>
           )}
 

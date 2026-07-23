@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Set, AsyncGenerator
 
 logger = logging.getLogger("nutria.sse")
+logger.setLevel(logging.INFO)
 
 _subscribers: Dict[str, Set[asyncio.Queue]] = {}
 _lock = asyncio.Lock()
@@ -49,7 +50,7 @@ async def event_generator(device_id: str) -> AsyncGenerator[str, None]:
                 data = await asyncio.wait_for(queue.get(), timeout=30)
                 yield f"event: reading\ndata: {data}\n\n"
             except asyncio.TimeoutError:
-                yield f"event: ping\ndata: {{{{}}}}\n\n"
+                yield "event: ping\ndata: {}\n\n"
     except asyncio.CancelledError:
         pass
     finally:

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import secrets
@@ -17,6 +18,16 @@ logger = logging.getLogger("nutria.mqtt")
 
 _mqtt_client = None
 _docker_client = None
+_main_loop = None
+
+
+def set_main_loop(loop: asyncio.AbstractEventLoop):
+    global _main_loop
+    _main_loop = loop
+
+
+def _get_main_loop():
+    return _main_loop or asyncio.get_event_loop()
 
 
 def _get_docker():
@@ -100,21 +111,19 @@ def _on_message(client, userdata, msg):
 
         from app.sse_handler import broadcast as sse_broadcast
         try:
-            loop = None
-            try:
-                import asyncio
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                pass
+            loop = _get_main_loop()
             if loop and loop.is_running():
-                loop.create_task(sse_broadcast(device["device_id"], {
-                    "reading_id": reading_id,
-                    "device_id": device["device_id"],
-                    "student_id": device["student_id"],
-                    "bpm": bpm,
-                    "timestamp": timestamp,
-                    "created_at": now,
-                }))
+                asyncio.run_coroutine_threadsafe(
+                    sse_broadcast(device["device_id"], {
+                        "reading_id": reading_id,
+                        "device_id": device["device_id"],
+                        "student_id": device["student_id"],
+                        "bpm": bpm,
+                        "timestamp": timestamp,
+                        "created_at": now,
+                    }),
+                    loop
+                )
         except Exception as sse_err:
             logger.warning("[MQTT] Error broadcasting SSE: %s", sse_err)
     except Exception as e:
