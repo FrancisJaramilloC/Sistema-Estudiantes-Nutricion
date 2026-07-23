@@ -1,6 +1,24 @@
 
 
 services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: mosquitto_nutricion
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - ./mosquitto/data:/mosquitto/data
+    networks:
+      - red_nutricional
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mosquitto_pub", "-t", "health_test", "-m", "ok", "-u", "health", "-P", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
   dynamodb:
     image: amazon/dynamodb-local
     container_name: dynamodb_nutricion
@@ -20,6 +38,9 @@ services:
     env_file:
       - .env
     environment:
+      - MQTT_HOST=${MQTT_HOST:-mosquitto}
+      - MQTT_PORT=${MQTT_PORT:-1883}
+      - MQTT_EXTERNAL_HOST=${MQTT_EXTERNAL_HOST:-192.168.110.145}
       - DYNAMODB_ENDPOINT_URL=${DYNAMODB_ENDPOINT_URL:-http://dynamodb:8000}
       - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-2}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-mock}
@@ -28,8 +49,13 @@ services:
       - COGNITO_USER_POOL_ID=${COGNITO_USER_POOL_ID}
       - COGNITO_APP_CLIENT_ID=${COGNITO_APP_CLIENT_ID}
       - JWT_SECRET=${JWT_SECRET:-nutria-secret-key-12345}
+    volumes:
+      - ./mosquitto/data:/mosquitto_data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       dynamodb:
+        condition: service_started
+      mosquitto:
         condition: service_started
     networks:
       - red_nutricional

@@ -8,6 +8,7 @@ cryptography
 bcrypt
 fpdf2
 prometheus-client
+paho-mqtt>=2.0.0
 
 # Testing
 pytest>=7.0
@@ -15,3 +16,4 @@ pytest-asyncio
 httpx
 moto>=4.0
 freezegun
+docker

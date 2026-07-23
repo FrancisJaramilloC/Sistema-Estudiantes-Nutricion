@@ -1,30 +1,18 @@
-/*
- * Monitor de Ritmo Cardíaco - ESP32
- * Versión con WiFiManager (Portal Cautivo) + Autenticación por MAC
- *
- * FLUJO DEL USUARIO:
- * 1. Encender el ESP32 → Si no tiene WiFi guardado, crea una red "Sensor-Ritmo-XXXX"
- * 2. Conectarse a esa red desde el celular → Se abre un portal web automáticamente
- * 3. Seleccionar la red WiFi e ingresar el CÓDIGO TEMPORAL de emparejamiento
- *    (generado desde el sistema por el estudiante autenticado)
- * 4. El ESP32 se conecta, se auto-registra en el backend y empieza a enviar datos
- *
- * RESET DE FÁBRICA:
- * Mantener presionado el botón BOOT (GPIO 0) durante 3 segundos al encender
- * para borrar la configuración WiFi y volver al modo Portal Cautivo.
- */
-
+#include "config.h"
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiManager.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <PubSubClient.h>
 #include <Preferences.h>
 #include <time.h>
-#include "config.h"
+#include <lwip/netdb.h>
 
-// ==================== VARIABLES GLOBALES ====================
+
 WiFiManager wm;
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient);
 Preferences preferences;
 
 unsigned long lastSendTime = 0;
@@ -34,22 +22,30 @@ bool shouldSaveConfig = false;
 
 String deviceMac = "";
 String pairingCode = "";
+String mqttBroker = "";
+int mqttBrokerPort = MQTT_PORT;
+String mqttUsername = "";
+String mqttPassword = "";
+bool registered = false;
 
-// ==================== PROTOTIPOS ====================
 void checkFactoryReset();
 void setupWiFiManager();
 void saveConfigCallback();
-void loadPairingCode();
+void loadNVS();
 void savePairingCode(const String& code);
+void saveMqttCredentials(const String& broker, int port, const String& user, const String& pass);
+void loadMqttCredentials();
 void initNTP();
 void autoRegisterDevice();
 int generateBPM();
 String generateTimestamp();
-void sendReading(int bpm, const String& timestamp);
+bool connectMqtt();
+void publishReading(int bpm, const String& timestamp);
 void handleError();
 void blinkLed(int times, int delayMs);
 
-// ==================== SETUP ====================
+void mqttCallback(char* topic, byte* payload, unsigned int length) {}
+
 void setup() {
   Serial.begin(115200);
 
@@ -59,45 +55,43 @@ void setup() {
 
   Serial.println();
   Serial.println("==========================================");
-  Serial.println("  Monitor de Ritmo Cardíaco v2.0");
-  Serial.println("  WiFiManager + Autenticación por MAC");
+  Serial.println("  Monitor de Ritmo Cardíaco v3.0");
+  Serial.println("  WiFiManager + MQTT");
   Serial.println("==========================================");
 
-  // Obtener dirección MAC del dispositivo
   deviceMac = WiFi.macAddress();
-  Serial.print("[MAC] Dirección MAC del dispositivo: ");
+  Serial.print("[MAC] Dirección MAC: ");
   Serial.println(deviceMac);
 
-  // Verificar si se solicita reset de fábrica
   checkFactoryReset();
 
-  // Cargar pairing_code guardado en NVS
-  loadPairingCode();
+  loadNVS();
 
-  // Configurar e iniciar WiFiManager
   setupWiFiManager();
 
-  // Inicializar NTP
   initNTP();
 
-  // Inicializar semilla aleatoria
   randomSeed(analogRead(0));
 
-  // Auto-registrar dispositivo en el backend
   autoRegisterDevice();
 
-  Serial.println("[SETUP] Listo. Enviando lecturas cada 5 segundos...");
+  if (mqttBroker.length() > 0 && mqttUsername.length() > 0 && mqttPassword.length() > 0) {
+    mqttClient.setServer(mqttBroker.c_str(), mqttBrokerPort);
+    mqttClient.setCallback(mqttCallback);
+    connectMqtt();
+  } else {
+    Serial.println("[MQTT] Sin credenciales MQTT. No se podrán enviar lecturas.");
+  }
+
+  Serial.println("[SETUP] Listo. Publicando lecturas cada 5 segundos por MQTT...");
   Serial.println("==========================================");
 }
 
-// ==================== LOOP PRINCIPAL ====================
 void loop() {
   unsigned long now = millis();
 
-  // Verificar conexión WiFi
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("[WIFI] Conexión perdida. Reconectando...");
-    // Intentar reconexión rápida
     WiFi.reconnect();
     int attempts = 0;
     while (WiFi.status() != WL_CONNECTED && attempts < 20) {
@@ -115,11 +109,13 @@ void loop() {
     return;
   }
 
-  // Enviar lectura en el intervalo configurado
+  if (mqttClient.connected()) {
+    mqttClient.loop();
+  }
+
   if (now - lastSendTime >= SEND_INTERVAL_MS) {
     lastSendTime = now;
 
-    // Verificar que la hora esté sincronizada
     if (!timeInitialized) {
       Serial.println("[NTP] Re-sincronizando hora...");
       initNTP();
@@ -127,33 +123,24 @@ void loop() {
 
     int bpm = generateBPM();
     String timestamp = generateTimestamp();
-    sendReading(bpm, timestamp);
+    publishReading(bpm, timestamp);
   }
 
   delay(10);
 }
 
-// ==================== FUNCIONES ====================
-
-/**
- * Verifica si el usuario mantiene presionado el botón BOOT
- * durante 3 segundos para hacer un factory reset.
- */
 void checkFactoryReset() {
   Serial.println("[RESET] Verificando botón de reset...");
   Serial.println("[RESET] Mantén presionado BOOT (GPIO 0) por 3 segundos para resetear.");
 
-  // Dar una ventana de 3 segundos para detectar el botón
   unsigned long startCheck = millis();
   bool buttonHeld = true;
 
   while (millis() - startCheck < 3000) {
     if (digitalRead(RESET_PIN) == HIGH) {
-      // Botón no presionado, salir
       buttonHeld = false;
       break;
     }
-    // Parpadeo rápido del LED mientras se detecta el botón
     digitalWrite(LED_PIN, !digitalRead(LED_PIN));
     delay(100);
   }
@@ -164,12 +151,11 @@ void checkFactoryReset() {
     Serial.println("[RESET] ¡FACTORY RESET ACTIVADO!");
     Serial.println("[RESET] Borrando configuración WiFi...");
     Serial.println("[RESET] Borrando código de emparejamiento...");
+    Serial.println("[RESET] Borrando credenciales MQTT...");
     Serial.println("==========================================");
 
-    // Borrar configuración WiFi
     wm.resetSettings();
 
-    // Borrar student_id de NVS
     preferences.begin("sensor", false);
     preferences.clear();
     preferences.end();
@@ -182,73 +168,71 @@ void checkFactoryReset() {
   Serial.println("[RESET] No se solicitó reset. Continuando arranque normal.");
 }
 
-/**
- * Callback que se ejecuta cuando WiFiManager guarda la configuración
- */
 void saveConfigCallback() {
   Serial.println("[WIFI] Configuración guardada por WiFiManager.");
   shouldSaveConfig = true;
 }
 
-/**
- * Carga el pairing_code desde la memoria NVS (Preferences)
- */
-void loadPairingCode() {
-  preferences.begin("sensor", true); // read-only
+void loadNVS() {
+  preferences.begin("sensor", true);
   pairingCode = preferences.getString("pairing_code", "");
+  mqttBroker = preferences.getString("mqtt_broker", "");
+  mqttBrokerPort = preferences.getInt("mqtt_port", MQTT_PORT);
+  mqttUsername = preferences.getString("mqtt_user", "");
+  mqttPassword = preferences.getString("mqtt_pass", "");
+  registered = preferences.getBool("registered", false);
   preferences.end();
 
   if (pairingCode.length() > 0) {
     Serial.println("[NVS] Código de emparejamiento cargado.");
-  } else {
-    Serial.println("[NVS] No hay código de emparejamiento guardado. Se pedirá en el Portal Cautivo.");
+  }
+  if (mqttBroker.length() > 0) {
+    Serial.println("[NVS] Credenciales MQTT cargadas.");
   }
 }
 
-/**
- * Guarda el pairing_code en la memoria NVS (Preferences)
- */
 void savePairingCode(const String& code) {
-  preferences.begin("sensor", false); // read-write
+  preferences.begin("sensor", false);
   preferences.putString("pairing_code", code);
   preferences.end();
   Serial.println("[NVS] Código de emparejamiento guardado.");
 }
 
-/**
- * Configura WiFiManager con el portal cautivo y parámetros personalizados
- */
+void saveMqttCredentials(const String& broker, int port, const String& user, const String& pass) {
+  preferences.begin("sensor", false);
+  preferences.putString("mqtt_broker", broker);
+  preferences.putInt("mqtt_port", port);
+  preferences.putString("mqtt_user", user);
+  preferences.putString("mqtt_pass", pass);
+  preferences.putBool("registered", true);
+  preferences.end();
+  Serial.println("[NVS] Credenciales MQTT guardadas.");
+}
+
 void setupWiFiManager() {
   Serial.println("[WIFI] Iniciando WiFiManager...");
 
-  // Crear parámetro personalizado para el código de emparejamiento temporal
   WiFiManagerParameter custom_pairing_code(
-    "pairing_code",          // ID del campo
-    "Código de emparejamiento", // Label que ve el usuario
-    pairingCode.c_str(),     // Valor por defecto (si ya había uno guardado)
-    16                        // Longitud máxima
+    "pairing_code",
+    "Código de emparejamiento",
+    pairingCode.c_str(),
+    16
   );
 
-  // Configurar WiFiManager
   wm.setSaveConfigCallback(saveConfigCallback);
   wm.addParameter(&custom_pairing_code);
   wm.setConfigPortalTimeout(CONFIG_PORTAL_TIMEOUT);
   wm.setConnectTimeout(20);
 
-  // Personalizar el portal
   wm.setTitle("Sensor de Ritmo Cardíaco");
 
-  // Generar nombre del AP con los últimos 4 caracteres del MAC
   String macClean = deviceMac;
   macClean.replace(":", "");
   String apName = String(AP_NAME_PREFIX) + macClean.substring(macClean.length() - 4);
 
   Serial.print("[WIFI] Nombre del AP: ");
   Serial.println(apName);
-  Serial.println("[WIFI] Conéctate a esta red WiFi desde tu celular para configurar.");
 
-  // LED parpadeando indica modo configuración
-  // autoConnect bloquea hasta que se conecte
   bool connected = wm.autoConnect(apName.c_str(), AP_PASSWORD);
 
   if (!connected) {
@@ -263,7 +247,6 @@ void setupWiFiManager() {
   Serial.print("[WIFI] RSSI: ");
   Serial.println(WiFi.RSSI());
 
-  // Guardar el pairing_code si se ingresó en el portal
   if (shouldSaveConfig) {
     String newPairingCode = String(custom_pairing_code.getValue());
     newPairingCode.trim();
@@ -275,24 +258,17 @@ void setupWiFiManager() {
     }
   }
 
-  // Verificar que tenemos un pairing_code configurado
   if (pairingCode.length() == 0) {
     Serial.println("[WARN] ¡No se ha configurado un código de emparejamiento!");
     Serial.println("[WARN] Reseteá el dispositivo (BOOT 3s) y configura el código.");
-    Serial.println("[WARN] Continuando sin código de emparejamiento...");
   }
 }
 
-/**
- * Inicializa NTP para obtener la hora actual
- */
 void initNTP() {
   Serial.println("[NTP] Inicializando...");
 
-  // Configurar zona horaria
   configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET_SEC, NTP_SERVER);
 
-  // Esperar hasta obtener la hora
   struct tm timeinfo;
   int attempts = 0;
   while (!getLocalTime(&timeinfo) && attempts < 10) {
@@ -313,21 +289,18 @@ void initNTP() {
   }
 }
 
-/**
- * Auto-registra el dispositivo en el backend usando la dirección MAC.
- * Se llama una vez en el setup. Es idempotente (se puede llamar varias veces).
- */
 void autoRegisterDevice() {
+  if (registered) {
+    Serial.println("[REGISTRO] Dispositivo ya registrado previamente.");
+    return;
+  }
+
   if (pairingCode.length() == 0) {
-    Serial.println("[REGISTRO] Saltando auto-registro: no hay código de emparejamiento configurado.");
+    Serial.println("[REGISTRO] Saltando auto-registro: no hay código de emparejamiento.");
     return;
   }
 
   Serial.println("[REGISTRO] Auto-registrando dispositivo en el backend...");
-  Serial.print("[REGISTRO] MAC: ");
-  Serial.println(deviceMac);
-  Serial.print("[REGISTRO] Código: ");
-  Serial.println(pairingCode);
 
   HTTPClient http;
   http.begin(REGISTER_URL);
@@ -341,22 +314,44 @@ void autoRegisterDevice() {
   String payload;
   serializeJson(doc, payload);
 
-  Serial.print("[REGISTRO] Payload: ");
-  Serial.println(payload);
-
   int httpCode = http.POST(payload);
 
   if (httpCode > 0) {
     String response = http.getString();
-    Serial.print("[REGISTRO] HTTP ");
-    Serial.println(httpCode);
 
     if (httpCode == 200 || httpCode == 201) {
-      Serial.println("[REGISTRO] ✓ Dispositivo registrado/verificado exitosamente.");
+      Serial.println("[REGISTRO] ✓ Dispositivo registrado exitosamente.");
       blinkLed(2, 200);
+
+      StaticJsonDocument<512> respDoc;
+      DeserializationError error = deserializeJson(respDoc, response);
+
+      if (!error) {
+        const char* broker = respDoc["mqtt_broker"] | "";
+        const char* mqttUser = respDoc["mqtt_username"] | "";
+        const char* mqttPass = respDoc["mqtt_password"] | "";
+
+        if (strlen(broker) > 0 && strlen(mqttUser) > 0 && strlen(mqttPass) > 0) {
+          String brokerHost = String(broker);
+          int port = MQTT_PORT;
+          int colonIdx = brokerHost.indexOf(':');
+          if (colonIdx > 0) {
+            port = brokerHost.substring(colonIdx + 1).toInt();
+            brokerHost = brokerHost.substring(0, colonIdx);
+          }
+
+          mqttBroker = brokerHost;
+          mqttBrokerPort = port;
+          mqttUsername = String(mqttUser);
+          mqttPassword = String(mqttPass);
+          registered = true;
+
+          saveMqttCredentials(mqttBroker, mqttBrokerPort, mqttUsername, mqttPassword);
+        }
+      }
     } else if (httpCode == 400 || httpCode == 404) {
       Serial.println("[REGISTRO] ✗ Código de emparejamiento inválido, expirado o ya usado.");
-      Serial.println("[REGISTRO] Generá un nuevo código en el sistema y reconfigurá el dispositivo (BOOT 3s).");
+      Serial.println("[REGISTRO] Generá un nuevo código y reconfigurá (BOOT 3s).");
       blinkLed(3, 300);
     } else {
       Serial.print("[REGISTRO] ⚠ Respuesta inesperada: ");
@@ -365,15 +360,11 @@ void autoRegisterDevice() {
   } else {
     Serial.print("[REGISTRO] ⚠ Error de conexión: ");
     Serial.println(http.errorToString(httpCode).c_str());
-    Serial.println("[REGISTRO] El dispositivo intentará registrarse en el próximo reinicio.");
   }
 
   http.end();
 }
 
-/**
- * Genera un valor simulado de BPM
- */
 int generateBPM() {
   int variation = random(-BPM_VARIATION, BPM_VARIATION + 1);
 
@@ -385,25 +376,19 @@ int generateBPM() {
   return constrain(bpm, 40, 180);
 }
 
-/**
- * Genera timestamp en formato ISO 8601 con hora real
- */
 String generateTimestamp() {
   struct tm timeinfo;
 
-  // Intentar obtener hora real
   if (timeInitialized && getLocalTime(&timeinfo)) {
     char buffer[30];
     strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &timeinfo);
 
-    // Mostrar la hora para verificar
     Serial.print("[TIMESTAMP] Hora real: ");
     Serial.println(buffer);
 
     return String(buffer);
   }
 
-  // Fallback: timestamp simulado (NO RECOMENDADO PARA PRODUCCIÓN)
   Serial.println("[WARN] Usando timestamp simulado");
   unsigned long uptime = millis() / 1000;
   unsigned long seconds = uptime % 60;
@@ -416,15 +401,152 @@ String generateTimestamp() {
   return String(buffer);
 }
 
-/**
- * Envía la lectura al backend autenticándose por MAC
- */
-void sendReading(int bpm, const String& timestamp) {
-  HTTPClient http;
-  http.begin(READING_URL);
+bool connectMqtt() {
+  if (mqttBroker.length() == 0) {
+    Serial.println("[FASE:MQTT-1] ERROR: broker hostname vacío");
+    return false;
+  }
 
-  http.addHeader("Content-Type", "application/json");
-  http.addHeader("X-Device-Mac", deviceMac);  // Autenticación por MAC
+  // --- FASE 1: Verificar WiFi ---
+  Serial.println("====== DIAGNÓSTICO MQTT ======");
+  Serial.print("[FASE:MQTT-1] WiFi status: ");
+  Serial.print(WiFi.status());
+  Serial.print(" (");
+  switch (WiFi.status()) {
+    case WL_CONNECTED: Serial.print("WL_CONNECTED"); break;
+    case WL_DISCONNECTED: Serial.print("WL_DISCONNECTED"); break;
+    case WL_CONNECT_FAILED: Serial.print("WL_CONNECT_FAILED"); break;
+    case WL_NO_SSID_AVAIL: Serial.print("WL_NO_SSID_AVAIL"); break;
+    default: Serial.print("DESCONOCIDO"); break;
+  }
+  Serial.println(")");
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("[FASE:MQTT-1] ERROR: WiFi no conectado");
+    return false;
+  }
+  Serial.print("[FASE:MQTT-1] WiFi OK - IP: ");
+  Serial.print(WiFi.localIP());
+  Serial.print(" | GW: ");
+  Serial.println(WiFi.gatewayIP());
+
+  // --- FASE 2: Resolver DNS ---
+  Serial.print("[FASE:MQTT-2] Resolviendo hostname: ");
+  Serial.println(mqttBroker);
+  struct hostent *he = gethostbyname(mqttBroker.c_str());
+  if (he == NULL) {
+    Serial.print("[FASE:MQTT-2] ERROR: DNS lookup falló (errno: ");
+    Serial.print(errno);
+    Serial.println(")");
+  } else {
+    struct in_addr addr;
+    memcpy(&addr, he->h_addr_list[0], sizeof(addr));
+    Serial.print("[FASE:MQTT-2] DNS OK -> IP: ");
+    Serial.println(inet_ntoa(addr));
+  }
+
+  // --- FASE 3: Test TCP ---
+  Serial.print("[FASE:MQTT-3] Test TCP a ");
+  Serial.print(mqttBroker);
+  Serial.print(":");
+  Serial.println(mqttBrokerPort);
+
+  WiFiClient testClient;
+  int tcpResult = -1;
+  for (int tcpAttempt = 0; tcpAttempt < 3; tcpAttempt++) {
+    if (tcpAttempt > 0) {
+      Serial.print("[FASE:MQTT-3] Reintento TCP #");
+      Serial.println(tcpAttempt + 1);
+      delay(1000);
+    }
+    bool connected = testClient.connect(mqttBroker.c_str(), mqttBrokerPort);
+    if (connected) {
+      tcpResult = 0;
+      break;
+    } else {
+      tcpResult = 1;
+      Serial.print("[FASE:MQTT-3] TCP falló (intento ");
+      Serial.print(tcpAttempt + 1);
+      Serial.println("/3)");
+    }
+  }
+  testClient.stop();
+
+  if (tcpResult != 0) {
+    Serial.println("[FASE:MQTT-3] ERROR: No se pudo establecer TCP");
+    return false;
+  }
+  Serial.println("[FASE:MQTT-3] TCP OK - conexión establecida");
+
+  // --- FASE 4: MQTT CONNECT ---
+  Serial.print("[FASE:MQTT-4] Enviando MQTT CONNECT...");
+  Serial.print(" clientId=ESP32_");
+  Serial.print(deviceMac);
+  Serial.print(" user=");
+  Serial.println(mqttUsername);
+
+  String clientId = "ESP32_" + deviceMac;
+  clientId.replace(":", "");
+  mqttClient.setServer(mqttBroker.c_str(), mqttBrokerPort);
+
+  int attempts = 0;
+  while (!mqttClient.connected() && attempts < 3) {
+    if (mqttClient.connect(clientId.c_str(), mqttUsername.c_str(), mqttPassword.c_str())) {
+      Serial.println("[FASE:MQTT-4] ✓ CONNECT aceptado");
+      blinkLed(1, 100);
+      return true;
+    } else {
+      attempts++;
+      int state = mqttClient.state();
+      Serial.print("[FASE:MQTT-4] ✗ CONNECT rechazado (intento ");
+      Serial.print(attempts);
+      Serial.print("/3) estado=");
+      Serial.print(state);
+      Serial.print(" (");
+      switch (state) {
+        case -4: Serial.print("CONNECTION_TIMEOUT - no hubo respuesta"); break;
+        case -3: Serial.print("CONNECTION_LOST - se perdió la conexión"); break;
+        case -2: Serial.print("CONNECT_FAILED - TCP no conectó"); break;
+        case -1: Serial.print("DISCONNECTED - cliente desconectado"); break;
+        case 1: Serial.print("BAD_PROTOCOL - versión MQTT no soportada"); break;
+        case 2: Serial.print("BAD_CLIENT_ID - ID de cliente rechazado"); break;
+        case 3: Serial.print("UNAVAILABLE - servidor no disponible"); break;
+        case 4: Serial.print("BAD_CREDENTIALS - usuario o contraseña incorrecto"); break;
+        case 5: Serial.print("UNAUTHORIZED - no autorizado"); break;
+        default: Serial.print("DESCONOCIDO"); break;
+      }
+      Serial.println(")");
+      delay(2000);
+    }
+  }
+
+  Serial.println("[FASE:MQTT-4] ERROR: No se pudo conectar al broker MQTT.");
+  Serial.println("[FASE:MQTT-5] Borrando credenciales y forzando re-registro...");
+  preferences.begin("sensor", false);
+  preferences.remove("mqtt_broker");
+  preferences.remove("mqtt_port");
+  preferences.remove("mqtt_user");
+  preferences.remove("mqtt_pass");
+  preferences.putBool("registered", false);
+  preferences.end();
+  mqttBroker = "";
+  registered = false;
+  Serial.println("[FASE:MQTT-5] Credenciales borradas. Reiniciando en 2s...");
+  delay(2000);
+  ESP.restart();
+  return false;
+}
+
+void publishReading(int bpm, const String& timestamp) {
+  if (!mqttClient.connected()) {
+    bool reconnected = connectMqtt();
+    if (!reconnected) {
+      handleError();
+      return;
+    }
+  }
+
+  String topic = String(MQTT_TOPIC_PREFIX) + "/" + deviceMac + "/lecturas";
+  topic.toLowerCase();
 
   StaticJsonDocument<128> doc;
   doc["bpm"] = bpm;
@@ -434,41 +556,25 @@ void sendReading(int bpm, const String& timestamp) {
   serializeJson(doc, payload);
 
   Serial.println("------------------------------");
-  Serial.print("[ENVIO] BPM: ");
+  Serial.print("[PUB] Topic: ");
+  Serial.println(topic);
+  Serial.print("[PUB] BPM: ");
   Serial.print(bpm);
   Serial.print(" | MAC: ");
   Serial.print(deviceMac);
   Serial.print(" | Timestamp: ");
   Serial.println(timestamp);
 
-  int httpCode = http.POST(payload);
-
-  if (httpCode > 0) {
-    String response = http.getString();
-    Serial.print("[RESPUESTA] HTTP ");
-    Serial.println(httpCode);
-
-    if (httpCode == 200 || httpCode == 201) {
-      blinkLed(1, 100);
-      consecutiveErrors = 0;
-      Serial.println("[OK] Lectura registrada exitosamente");
-    } else {
-      Serial.print("[ERROR] Código inesperado. Respuesta: ");
-      Serial.println(response);
-      handleError();
-    }
+  if (mqttClient.publish(topic.c_str(), payload.c_str(), true)) {
+    blinkLed(1, 100);
+    consecutiveErrors = 0;
+    Serial.println("[OK] Lectura publicada exitosamente");
   } else {
-    Serial.print("[ERROR] Falló la petición HTTP: ");
-    Serial.println(http.errorToString(httpCode).c_str());
+    Serial.println("[ERROR] Falló la publicación MQTT");
     handleError();
   }
-
-  http.end();
 }
 
-/**
- * Maneja errores consecutivos
- */
 void handleError() {
   consecutiveErrors++;
   Serial.print("[ERROR] Fallos consecutivos: ");
@@ -483,9 +589,6 @@ void handleError() {
   }
 }
 
-/**
- * Parpadea el LED un número de veces
- */
 void blinkLed(int times, int delayMs) {
   for (int i = 0; i < times; i++) {
     digitalWrite(LED_PIN, HIGH);

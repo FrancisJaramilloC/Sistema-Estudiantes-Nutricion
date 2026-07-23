@@ -1,10 +1,3 @@
-"""
-Shared fixtures for all backend tests.
-
-Uses unittest.mock to simulate DynamoDB and FastAPI TestClient for route testing.
-This is more reliable than moto and avoids external service dependencies.
-"""
-
 import os
 from typing import Any, Dict, Generator
 from unittest.mock import MagicMock, patch
@@ -13,20 +6,18 @@ import boto3
 import pytest
 from fastapi.testclient import TestClient
 
-# Force local mode BEFORE importing app modules (config reads env at import time)
 os.environ.pop("DYNAMODB_ENDPOINT_URL", None)
 os.environ["COGNITO_USER_POOL_ID"] = "mock_pool_id"
 os.environ["AWS_ACCESS_KEY_ID"] = "testing"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 os.environ["JWT_SECRET"] = "test-secret-key-for-unit-tests"
+os.environ["MQTT_HOST"] = "localhost"
 
 from app.main import app
 
 
 class FakeDynamoTable:
-    """Simulates a DynamoDB table with in-memory dict storage."""
-
     def __init__(self):
         self._items: Dict[str, Dict[str, Any]] = {}
 
@@ -45,7 +36,6 @@ class FakeDynamoTable:
         key = self._extract_dict_key(Key)
         if key in self._items and ExpressionAttributeValues:
             item = self._items[key]
-            # Parse UpdateExpression into field -> alias mappings
             expr = UpdateExpression.replace("SET ", "").replace("set ", "")
             parts = expr.split(",")
             for part in parts:
@@ -68,10 +58,8 @@ class FakeDynamoTable:
         items = list(self._items.values())
         if FilterExpression is not None and ExpressionAttributeValues:
             filter_val = list(ExpressionAttributeValues.values())[0]
-            # Parse the filter expression to extract the field name
             expr = FilterExpression
             if expr:
-                # Simple parse: assumes "field = :val" format
                 parts = expr.split("=")
                 if len(parts) >= 1:
                     field_name = parts[0].strip()
@@ -91,7 +79,6 @@ class FakeDynamoTable:
         if ExpressionAttributeValues:
             vals = list(ExpressionAttributeValues.values())
             if len(vals) >= 1:
-                # Support both device_id and student_id as partition keys
                 items = [i for i in items if vals[0] in str(i.get("device_id", "")) or vals[0] in str(i.get("student_id", ""))]
         items = items[:Limit]
         return {"Items": items}
@@ -111,7 +98,6 @@ class FakeDynamoTable:
         return ""
 
 
-# Global fake tables shared across mocks
 _fake_tables: Dict[str, FakeDynamoTable] = {}
 
 
@@ -122,8 +108,6 @@ def _get_fake_table(name: str) -> FakeDynamoTable:
 
 
 class MockDynamoDBResource:
-    """Pretends to be a boto3 DynamoDB resource, returning FakeDynamoTable for each table."""
-
     def Table(self, name: str):
         table = _get_fake_table(name)
         mock_table = MagicMock()
@@ -141,53 +125,58 @@ _original_boto3_resource = boto3.resource
 
 
 def _mock_boto3_resource(service: str, **kwargs):
-    """Intercept `boto3.resource('dynamodb', ...)` calls; pass everything else through."""
     if service == "dynamodb":
         return MockDynamoDBResource()
-    # For non-dynamodb services (like cognito-idp), use the real boto3
     return _original_boto3_resource(service, **kwargs)
 
 
 @pytest.fixture(scope="function", autouse=True)
 def mock_dynamodb():
-    """Mock boto3 DynamoDB before each test so routes interact with in-memory storage.
-
-    This patches boto3.resource at the top level, which intercepts calls from all
-    modules (database.py, routes/admin.py, routes/auth.py, etc.).
-    """
     _fake_tables.clear()
     patcher = patch("boto3.resource", _mock_boto3_resource)
     patcher.start()
+
+    patcher_mqtt_start = patch("app.mqtt_handler.start_mqtt_client")
+    patcher_mqtt_start.start()
+    patcher_mqtt_stop = patch("app.mqtt_handler.stop_mqtt_client")
+    patcher_mqtt_stop.start()
+    patcher_mqtt_sync = patch("app.mqtt_handler.sync_all_devices_to_mosquitto")
+    patcher_mqtt_sync.start()
+    patcher_sync_device = patch("app.mqtt_handler.sync_device_to_mosquitto")
+    patcher_sync_device.start()
+    patcher_sync_device_routes = patch("app.routes.devices.sync_device_to_mosquitto")
+    patcher_sync_device_routes.start()
+
     yield
+    patcher_sync_device_routes.stop()
+    patcher_sync_device.stop()
+    patcher_mqtt_sync.stop()
+    patcher_mqtt_stop.stop()
+    patcher_mqtt_start.stop()
     patcher.stop()
 
 
 @pytest.fixture
 def client() -> Generator:
-    """FastAPI TestClient pointing at the real app with mocked DynamoDB."""
     with TestClient(app) as c:
         yield c
 
 
 @pytest.fixture
 def teacher_token() -> str:
-    """Return a valid mock teacher token."""
     return "mock-teacher-token"
 
 
 @pytest.fixture
 def student_token() -> str:
-    """Return a valid mock student token."""
     return "mock-student-token"
 
 
 @pytest.fixture
 def auth_header_teacher(teacher_token: str) -> dict:
-    """Authorization header for a teacher user."""
     return {"Authorization": f"Bearer {teacher_token}"}
 
 
 @pytest.fixture
 def auth_header_student(student_token: str) -> dict:
-    """Authorization header for a student user."""
     return {"Authorization": f"Bearer {student_token}"}
