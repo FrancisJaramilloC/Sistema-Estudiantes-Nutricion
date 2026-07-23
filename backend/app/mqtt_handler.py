@@ -58,6 +58,9 @@ def _on_message(client, userdata, msg):
         if not mac:
             return
 
+        if ":" not in mac and len(mac) == 12:
+            mac = ":".join(mac[i:i+2] for i in range(0, 12, 2))
+
         payload = json.loads(msg.payload.decode())
         bpm = payload.get("bpm")
         timestamp = payload.get("timestamp")
@@ -103,6 +106,12 @@ def _on_message(client, userdata, msg):
             "bpm": bpm,
             "created_at": now
         })
+
+        devices_table.update_item(
+            Key={"device_id": device["device_id"]},
+            UpdateExpression="SET last_seen = :now",
+            ExpressionAttributeValues={":now": now}
+        )
 
         logger.info(
             "[MQTT_HEART_RATE] Lectura registrada: device=%s, student=%s, bpm=%d",

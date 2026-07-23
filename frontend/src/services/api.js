@@ -578,4 +578,15 @@ export const apiService = {
     if (!response.ok) throw new Error(data.detail || 'Error al crear usuario');
     return data;
   },
+
+  unpairDevice: async (token, deviceId) => {
+    const url = `${getBaseUrl()}/api/v1/devices/${deviceId}/unpair`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Error al desvincular dispositivo');
+    return data;
+  },
 };

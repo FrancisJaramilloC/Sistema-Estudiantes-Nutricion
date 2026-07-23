@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.database import get_dynamodb_resource, convert_decimals
 from app.auth import get_current_user, require_role
-from app.mqtt_handler import generate_mqtt_password, sync_device_to_mosquitto
+from app.mqtt_handler import generate_mqtt_password, sync_device_to_mosquitto, get_mqtt_client
 
 logger = logging.getLogger("nutria.monitoring")
 router = APIRouter(tags=["devices"])
@@ -311,3 +311,52 @@ def list_my_devices(user: dict = Depends(get_current_user)):
         item.pop("api_key", None)
 
     return {"devices": items, "count": len(items)}
+
+
+@router.post("/devices/{device_id}/unpair")
+def unpair_device(
+    device_id: str,
+    user: dict = Depends(require_role(["Docentes", "Estudiantes"]))
+):
+    db = get_dynamodb_resource()
+    devices_table = db.Table("devices")
+
+    response = devices_table.get_item(Key={"device_id": device_id})
+    device = response.get("Item")
+
+    if not device:
+        raise HTTPException(status_code=404, detail="Dispositivo no encontrado")
+
+    groups = user.get("cognito:groups", ["Estudiantes"])
+    is_teacher = "Docentes" in groups
+    student_id = user.get("username")
+
+    if not is_teacher and device.get("student_id") != student_id:
+        raise HTTPException(status_code=403, detail="No tienes permiso para desvincular este dispositivo")
+
+    mac = device.get("mac_address", "")
+    new_password = generate_mqtt_password()
+
+    devices_table.update_item(
+        Key={"device_id": device_id},
+        UpdateExpression="SET mqtt_password = :p, activo = :a",
+        ExpressionAttributeValues={":p": new_password, ":a": False}
+    )
+
+    from app.mqtt_handler import sync_device_to_mosquitto
+    if mac:
+        sync_device_to_mosquitto(mac, new_password)
+
+    mqtt = get_mqtt_client()
+    if mqtt and mac:
+        from app.config import MQTT_TOPIC_PREFIX
+        import json as j
+        cmd_topic = f"{MQTT_TOPIC_PREFIX}/{mac.replace(':', '').upper()}/comandos"
+        mqtt.publish(cmd_topic, j.dumps({"comando": "reset", "motivo": "desvinculado"}), qos=1)
+
+    logger.info("[DEVICE] Dispositivo %s desvinculado por %s", device_id, student_id)
+
+    return {
+        "mensaje": "Dispositivo desvinculado. El ESP32 se reiniciará en modo configuración.",
+        "device_id": device_id
+    }

@@ -239,13 +239,53 @@ export default function HeartRateDashboard({ token, userPayload, role }) {
                 style={{ width: '100%', height: '40px' }}
               >
                 <option value="">-- Selecciona --</option>
-                {devices.map((d) => (
-                  <option key={d.device_id} value={d.device_id}>
-                    {d.nombre} - {d.student_id}
-                  </option>
-                ))}
+                {devices.map((d) => {
+                  const lastSeen = d.last_seen ? new Date(d.last_seen) : null;
+                  const isOnline = lastSeen && (Date.now() - lastSeen.getTime()) < 70000;
+                  return (
+                    <option key={d.device_id} value={d.device_id}>
+                      {isOnline ? '🟢' : '🔴'} {d.nombre} - {d.student_id}
+                    </option>
+                  );
+                })}
               </select>
             </div>
+            {selectedDeviceId && (() => {
+              const device = devices.find(d => d.device_id === selectedDeviceId);
+              if (!device) return null;
+              const lastSeen = device.last_seen ? new Date(device.last_seen) : null;
+              const isOnline = lastSeen && (Date.now() - lastSeen.getTime()) < 70000;
+              return (
+                <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '4px',
+                    fontSize: '0.85rem', color: isOnline ? '#22c55e' : '#ef4444'
+                  }}>
+                    <span style={{
+                      width: 10, height: 10, borderRadius: '50%',
+                      backgroundColor: isOnline ? '#22c55e' : '#ef4444',
+                      display: 'inline-block'
+                    }} />
+                    {isOnline ? 'En línea' : 'Desconectado'}
+                  </span>
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    style={{ marginLeft: 'auto', color: '#ef4444' }}
+                    onClick={async () => {
+                      if (!window.confirm('¿Desvincular este dispositivo? El ESP32 se reiniciará en modo configuración.')) return;
+                      try {
+                        await apiService.unpairDevice(token, selectedDeviceId);
+                        setRefreshKey(k => k + 1);
+                      } catch (err) {
+                        alert('Error al desvincular: ' + err.message);
+                      }
+                    }}
+                  >
+                    Desvincular
+                  </button>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="card">
