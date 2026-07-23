@@ -153,7 +153,7 @@ export default function HeartRateDashboard({ token, userPayload, role }) {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const { liveReadings, latestReading, isLive, error: sseError, status: sseStatus } = useReadingStream(token, selectedDeviceId);
-  const { sessions, currentSession, loading: sessionsLoading, refresh: refreshSessions } = useSessions(token, selectedDeviceId);
+  const { sessions, currentSession, loading: sessionsLoading, refresh: refreshSessions, refreshCurrent: refreshCurrentSession } = useSessions(token, selectedDeviceId);
 
   useEffect(() => {
     const fetchDevices = async () => {
@@ -199,9 +199,10 @@ export default function HeartRateDashboard({ token, userPayload, role }) {
     const id = setInterval(() => {
       fetchRawReadings();
       refreshSessions();
+      refreshCurrentSession();
     }, POLL_INTERVAL);
     return () => clearInterval(id);
-  }, [selectedDeviceId, fetchRawReadings, refreshSessions]);
+  }, [selectedDeviceId, fetchRawReadings, refreshSessions, refreshCurrentSession]);
 
   const handleDeviceRegistered = () => {
     setRefreshKey((k) => k + 1);
@@ -226,7 +227,12 @@ export default function HeartRateDashboard({ token, userPayload, role }) {
           <PairingCodeGenerator token={token} role={role} onGenerated={handleDeviceRegistered} />
 
           <div className="card">
-            <h2>Dispositivo</h2>
+            <div className="card-header-row">
+              <h2>Dispositivo</h2>
+              <button className="btn btn-secondary btn-sm" onClick={() => setRefreshKey(k => k + 1)} title="Refrescar dispositivos">
+                ↻
+              </button>
+            </div>
             <div className="form-group">
               <select
                 value={selectedDeviceId}
