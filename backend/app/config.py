@@ -26,3 +26,12 @@ SMTP_FROM = os.getenv("SMTP_FROM", "")
 TASKS_TABLE = os.getenv("TASKS_TABLE", "tasks")
 AUDITORIA_TABLE = os.getenv("AUDITORIA_TABLE", "Auditoria_Planes_Table")
 USERS_TABLE = os.getenv("USERS_TABLE", "users_table")
+
+MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_EXTERNAL_HOST = os.getenv("MQTT_EXTERNAL_HOST", MQTT_HOST)
+MQTT_USERNAME = os.getenv("MQTT_USERNAME", "backend")
+MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "backend_mqtt_2026")
+MQTT_TOPIC_PREFIX = "dispositivos"
+MQTT_PASSWD_FILE = "/mosquitto_data/passwd"
+MOSQUITTO_CONTAINER = "mosquitto_nutricion"

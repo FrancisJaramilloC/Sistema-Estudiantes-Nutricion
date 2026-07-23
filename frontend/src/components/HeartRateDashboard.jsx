@@ -1,5 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { apiService } from '../services/api';
+import { useReadingStream } from '../hooks/useReadingStream';
+import { useSessions } from '../hooks/useSessions';
+import BpmGauge from './BpmGauge';
+import LiveChart from './LiveChart';
+import SessionCard from './SessionCard';
+import SessionSummary from './SessionSummary';
+import MedicalAlerts from './MedicalAlerts';
 
 function getBpmStatus(bpm) {
   if (bpm < 60) return { label: 'Bajo', className: 'bpm-low' };
@@ -19,171 +26,114 @@ function formatDate(isoString) {
   }
 }
 
-function RegisterDeviceForm({ token, onRegistered }) {
-  const [studentId, setStudentId] = useState('');
-  const [nombre, setNombre] = useState('ESP32 Cardíaco');
+function PairingCodeGenerator({ token, role, onGenerated }) {
+  const isDocente = role === 'Docentes';
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [apiKeyResult, setApiKeyResult] = useState(null);
+  const [codeData, setCodeData] = useState(null);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+  const [students, setStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState('');
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!studentId.trim()) return;
+  useEffect(() => {
+    if (!codeData) return;
+    const expiresAt = new Date(codeData.expires_at).getTime();
+    const tick = () => {
+      const left = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000));
+      setSecondsLeft(left);
+      if (left <= 0) setCodeData(null);
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [codeData]);
+
+  useEffect(() => {
+    if (!isDocente) return;
+    let active = true;
+    apiService.listUsers(token)
+      .then((data) => {
+        if (!active) return;
+        const list = Array.isArray(data) ? data : (data.users || []);
+        const estudiantes = list.filter(
+          (u) => (u.role === 'Estudiantes') || (u.groups || []).includes('Estudiantes')
+        );
+        setStudents(estudiantes);
+      })
+      .catch(() => setStudents([]));
+    return () => { active = false; };
+  }, [isDocente, token]);
+
+  const handleGenerate = async () => {
     setLoading(true);
     setError('');
-    setApiKeyResult(null);
+    setCodeData(null);
     try {
-      const data = await apiService.registerDevice(token, studentId.trim(), nombre.trim());
-      setApiKeyResult(data);
+      const targetStudent = isDocente ? selectedStudent : undefined;
+      if (isDocente && !targetStudent) {
+        throw new Error('Selecciona un estudiante para generar el código.');
+      }
+      const data = await apiService.createPairingCode(token, targetStudent);
+      setCodeData(data);
+      if (onGenerated) onGenerated();
     } catch (err) {
-      setError(err.message || 'Error al registrar dispositivo');
+      setError(err.message || 'Error al generar el código de emparejamiento');
     } finally {
       setLoading(false);
     }
   };
 
   const copyToClipboard = () => {
-    if (apiKeyResult?.api_key) {
-      navigator.clipboard.writeText(apiKeyResult.api_key)
-        .then(() => alert('Clave de API copiada al portapapeles'))
-        .catch(() => alert('No se pudo copiar. Selecciona la clave manualmente.'));
+    if (codeData?.code) {
+      navigator.clipboard.writeText(codeData.code)
+        .then(() => alert('Código copiado al portapapeles'))
+        .catch(() => alert('No se pudo copiar. Selecciona el código manualmente.'));
     }
   };
 
   return (
-    <div className="card">
-      <h2>🔐 Registrar Nuevo Dispositivo</h2>
-      <p style={{ fontSize: '0.9rem', color: 'hsl(var(--text-secondary))', marginBottom: '12px' }}>
-        Genera una API Key para asociar un ESP32 a un estudiante. Guarda la clave, no se mostrará de nuevo.
+    <div className="card pairing-card">
+      <h2>Emparejar ESP32</h2>
+      <p className="card-hint">
+        {isDocente
+          ? 'Genera un código temporal para un estudiante. El código vincula el dispositivo a la cuenta del estudiante.'
+          : 'Genera un código temporal. Ingrésalo en el portal del ESP32 para vincular el dispositivo.'}
       </p>
 
-      <form onSubmit={handleSubmit}>
-        <div className="inline-fields" style={{ marginBottom: 0 }}>
-          <div className="form-group">
-            <label>ID del Estudiante</label>
-            <input
-              type="text"
-              value={studentId}
-              onChange={(e) => setStudentId(e.target.value)}
-              placeholder="ej. estudiante_prueba"
-              disabled={loading}
-              required
-            />
-          </div>
-          <div className="form-group">
-            <label>Nombre del Dispositivo</label>
-            <input
-              type="text"
-              value={nombre}
-              onChange={(e) => setNombre(e.target.value)}
-              placeholder="ESP32 Cardíaco"
-              disabled={loading}
-            />
-          </div>
-        </div>
-        <div className="form-actions" style={{ marginTop: '12px' }}>
-          <button type="submit" className="btn" disabled={loading || !studentId.trim()}>
-            {loading ? <div className="spinner"></div> : 'Generar Clave de API'}
-          </button>
-        </div>
-      </form>
-
-      {error && <div className="error-msg" style={{ marginTop: '12px' }}>{error}</div>}
-
-      {apiKeyResult && (
-        <div className="hr-api-key-box">
-          <p className="hr-api-key-label">
-            ⚠️ Clave de API generada para <strong>{apiKeyResult.nombre}</strong>
-          </p>
-          <div className="hr-api-key-value">{apiKeyResult.api_key}</div>
-          <p className="hr-api-key-warning">
-            Guarda esta clave en el código del ESP32. No podrás recuperarla después.
-          </p>
-          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-            <button className="btn btn-secondary" onClick={copyToClipboard} style={{ fontSize: '0.85rem', padding: '6px 14px' }}>
-              📋 Copiar
-            </button>
-            <button
-              className="btn btn-secondary"
-              onClick={() => { setApiKeyResult(null); setStudentId(''); setNombre('ESP32 Cardíaco'); onRegistered(); }}
-              style={{ fontSize: '0.85rem', padding: '6px 14px' }}
-            >
-              ✅ Cerrar
-            </button>
-          </div>
+      {isDocente && (
+        <div className="form-group">
+          <label>Estudiante</label>
+          <select
+            value={selectedStudent}
+            onChange={(e) => setSelectedStudent(e.target.value)}
+            disabled={loading || !!codeData}
+          >
+            <option value="">-- Selecciona un estudiante --</option>
+            {students.map((s) => (
+              <option key={s.username} value={s.username}>
+                {s.nombre ? `${s.nombre} (${s.username})` : s.username}
+              </option>
+            ))}
+          </select>
         </div>
       )}
-    </div>
-  );
-}
-
-function DeviceList({ token }) {
-  const [devices, setDevices] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const fetchDevices = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await apiService.listDevices(token);
-      setDevices(data.devices || []);
-    } catch (err) {
-      setError(err.message || 'Error al listar dispositivos');
-    } finally {
-      setLoading(false);
-    }
-  }, [token]);
-
-  useEffect(() => { fetchDevices(); }, [fetchDevices]);
-
-  return (
-    <div className="card">
-      <div className="profile-header">
-        <h2>📡 Dispositivos Registrados</h2>
-        <button className="btn btn-secondary" onClick={fetchDevices} disabled={loading}
-          style={{ width: 'auto', padding: '4px 10px', fontSize: '0.8rem' }}>
-          {loading ? <div className="spinner"></div> : '🔄 Refrescar'}
-        </button>
-      </div>
+      <button type="button" className="btn" onClick={handleGenerate} disabled={loading || !!codeData}>
+        {loading ? <div className="spinner"></div> : 'Generar código'}
+      </button>
 
       {error && <div className="error-msg">{error}</div>}
 
-      {devices.length === 0 && !loading && (
-        <p className="empty-state">No hay dispositivos registrados.</p>
-      )}
-
-      {devices.length > 0 && (
-        <div className="hr-table-wrapper">
-          <table className="hr-table">
-            <thead>
-              <tr>
-                <th>Dispositivo</th>
-                <th>ID</th>
-                <th>Estudiante</th>
-                <th>Estado</th>
-                <th>Registrado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {devices.map((d) => (
-                <tr key={d.device_id}>
-                  <td>{d.nombre}</td>
-                  <td className="hr-device-id">{d.device_id?.substring(0, 8)}...</td>
-                  <td>{d.student_id}</td>
-                  <td>
-                    <span className={`hr-badge ${d.activo ? 'bpm-normal' : 'bpm-low'}`}>
-                      {d.activo ? '✅ Activo' : '❌ Inactivo'}
-                    </span>
-                  </td>
-                  <td style={{ fontSize: '0.85rem', color: 'hsl(var(--text-muted))' }}>
-                    {d.created_at ? formatDate(d.created_at) : '-'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="hr-count">{devices.length} dispositivo(s)</p>
+      {codeData && (
+        <div className="hr-api-key-box">
+          <p className="hr-api-key-label">
+            Código para <strong>{codeData.student_id}</strong> (expira en {secondsLeft}s)
+          </p>
+          <div className="hr-api-key-value">{codeData.code}</div>
+          <p className="hr-api-key-warning">Ingresa este código en el portal cautivo del ESP32.</p>
+          <div className="code-actions">
+            <button className="btn btn-secondary" onClick={copyToClipboard}>Copiar</button>
+            <button className="btn btn-secondary" onClick={() => setCodeData(null)}>Cerrar</button>
+          </div>
         </div>
       )}
     </div>
@@ -192,146 +142,220 @@ function DeviceList({ token }) {
 
 export default function HeartRateDashboard({ token, userPayload, role }) {
   const isDocente = role === 'Docentes';
-  const [studentId, setStudentId] = useState('');
-  const [readings, setReadings] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [devices, setDevices] = useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const [selectedSession, setSelectedSession] = useState(null);
+  const [rawReadings, setRawReadings] = useState([]);
+  const [showRaw, setShowRaw] = useState(false);
+  const [loadingReadings, setLoadingReadings] = useState(false);
   const [error, setError] = useState('');
-  const [autoRefresh, setAutoRefresh] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const fetchReadings = useCallback(async () => {
-    if (!studentId.trim()) return;
-    setLoading(true);
-    setError('');
+  const { liveReadings, latestReading, isLive, error: sseError, status: sseStatus } = useReadingStream(token, selectedDeviceId);
+  const { sessions, currentSession, loading: sessionsLoading, refresh: refreshSessions, refreshCurrent: refreshCurrentSession } = useSessions(token, selectedDeviceId);
+
+  useEffect(() => {
+    const fetchDevices = async () => {
+      try {
+        const data = isDocente
+          ? await apiService.listDevices(token)
+          : await apiService.getMyDevices(token);
+        const list = data.devices || [];
+        setDevices(list);
+        if (list.length > 0 && !selectedDeviceId) {
+          setSelectedDeviceId(list[0].device_id);
+        }
+      } catch (err) {
+        setError(err.message || 'Error al cargar dispositivos');
+      }
+    };
+    fetchDevices();
+  }, [token, isDocente, refreshKey]);
+
+  const fetchRawReadings = useCallback(async () => {
+    if (!selectedDeviceId) return;
+    setLoadingReadings(true);
     try {
-      const data = await apiService.getHeartReadings(token, studentId.trim());
-      setReadings(data.readings || []);
-      setLastRefresh(new Date().toLocaleTimeString('es-EC'));
+      const data = await apiService.getHeartReadings(token, selectedDeviceId);
+      setRawReadings(data.readings || []);
     } catch (err) {
       setError(err.message || 'Error al obtener lecturas');
     } finally {
-      setLoading(false);
+      setLoadingReadings(false);
     }
-  }, [token, studentId]);
+  }, [token, selectedDeviceId]);
 
   useEffect(() => {
-    if (!autoRefresh || !studentId.trim()) return;
-    const interval = setInterval(fetchReadings, 10000);
-    return () => clearInterval(interval);
-  }, [autoRefresh, studentId, fetchReadings]);
+    if (selectedDeviceId) {
+      fetchRawReadings();
+      setSelectedSession(null);
+    }
+  }, [selectedDeviceId, fetchRawReadings]);
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter') fetchReadings();
-  };
+  const POLL_INTERVAL = 5000;
+  useEffect(() => {
+    if (!selectedDeviceId) return;
+    const id = setInterval(() => {
+      fetchRawReadings();
+      refreshSessions();
+      refreshCurrentSession();
+    }, POLL_INTERVAL);
+    return () => clearInterval(id);
+  }, [selectedDeviceId, fetchRawReadings, refreshSessions, refreshCurrentSession]);
 
   const handleDeviceRegistered = () => {
     setRefreshKey((k) => k + 1);
   };
 
+  const handleSelectSession = (session) => {
+    setSelectedSession(session);
+  };
+
+  const displaySession = selectedSession || currentSession;
+  const currentBpm = latestReading?.bpm || displaySession?.latest_reading?.bpm || null;
+
   return (
     <div className="dashboard-content">
       <div className="content-header">
         <h1>Monitoreo de Ritmo Cardíaco</h1>
-        <p>Visualiza las lecturas de ritmo cardíaco enviadas por dispositivos ESP32 asociados a estudiantes.</p>
+        <p>Visualiza lecturas en tiempo real, sesiones de monitoreo y resumen médico por paciente.</p>
       </div>
 
-      <div className="dashboard-grid">
-        {isDocente && (
-          <>
-            <RegisterDeviceForm token={token} onRegistered={handleDeviceRegistered} />
-            <DeviceList key={refreshKey} token={token} />
-          </>
-        )}
+      <div className="session-layout">
+        <div className="session-sidebar">
+          <PairingCodeGenerator token={token} role={role} onGenerated={handleDeviceRegistered} />
 
-        <div className="card">
-          <h2>Consultar Lecturas</h2>
-          <div className="hr-search-row">
-            <div className="form-group" style={{ flex: 1 }}>
-              <label>ID del Estudiante</label>
-              <input
-                type="text"
-                value={studentId}
-                onChange={(e) => setStudentId(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="ej. estudiante_prueba"
-              />
+          <div className="card">
+            <div className="card-header-row">
+              <h2>Dispositivo</h2>
+              <button className="btn btn-secondary btn-sm" onClick={() => setRefreshKey(k => k + 1)} title="Refrescar dispositivos">
+                ↻
+              </button>
             </div>
-            <button className="btn" onClick={fetchReadings} disabled={loading || !studentId.trim()} style={{ marginTop: '24px', height: '40px' }}>
-              {loading ? <div className="spinner"></div> : 'Buscar'}
-            </button>
+            <div className="form-group">
+              <select
+                value={selectedDeviceId}
+                onChange={(e) => setSelectedDeviceId(e.target.value)}
+                style={{ width: '100%', height: '40px' }}
+              >
+                <option value="">-- Selecciona --</option>
+                {devices.map((d) => (
+                  <option key={d.device_id} value={d.device_id}>
+                    {d.nombre} - {d.student_id}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
-          <p style={{ fontSize: '0.82rem', color: 'hsl(var(--text-muted))', marginBottom: '8px' }}>
-            💡 Las lecturas son enviadas automáticamente por el ESP32 cada 5 segundos.
-          </p>
+          <div className="card">
+            <div className="card-header-row">
+              <h2>Sesiones</h2>
+              <button className="btn btn-secondary btn-sm" onClick={refreshSessions} disabled={sessionsLoading}>
+                {sessionsLoading ? <div className="spinner" /> : '↻'}
+              </button>
+            </div>
+            {sessions.length === 0 && !sessionsLoading && (
+              <p className="empty-state">Sin sesiones registradas.</p>
+            )}
+            <div className="session-list">
+              {sessions.map((s, i) => (
+                <SessionCard
+                  key={`${s.start_time}-${i}`}
+                  session={s}
+                  selected={selectedSession?.start_time === s.start_time}
+                  onClick={() => handleSelectSession(s)}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
 
-          <div className="hr-controls">
-            <label className="hr-auto-refresh">
-              <input
-                type="checkbox"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-              />
-              Actualizar automáticamente cada 10s
-            </label>
-            {lastRefresh && (
-              <span className="hr-last-refresh">Última actualización: {lastRefresh}</span>
+        <div className="session-main">
+          <div className="session-top-row">
+            <BpmGauge
+              bpm={currentBpm}
+              isLive={isLive}
+              label={displaySession ? `Sesión ${displaySession.classification === 'normal' ? 'Normal' : displaySession.classification === 'atencion' ? 'En Observación' : 'Crítica'}` : 'Sin sesión activa'}
+            />
+            <LiveChart readings={liveReadings} />
+          </div>
+
+          {displaySession && (
+            <div className="session-details">
+              <div className="session-detail-card">
+                <h3>Resumen de la Sesión</h3>
+                <SessionSummary session={displaySession} />
+              </div>
+              <div className="session-detail-card">
+                <MedicalAlerts session={displaySession} />
+              </div>
+            </div>
+          )}
+
+          {selectedDeviceId && (
+            <div className="card" style={{ padding: '8px 16px', marginBottom: '12px', fontSize: '0.85rem' }}>
+              <strong>SSE:</strong>{' '}
+              <span style={{ color: isLive ? '#22c55e' : sseError ? '#ef4444' : '#f59e0b' }}>
+                {sseStatus}
+              </span>
+              {sseError && <span style={{ color: '#ef4444', marginLeft: '8px' }}>({sseError})</span>}
+            </div>
+          )}
+
+          {!displaySession && currentBpm && (
+            <div className="session-details">
+              <div className="session-detail-card">
+                <h3>Esperando datos de sesión...</h3>
+                <p className="empty-state">Los datos de la sesión se calcularán cuando haya suficientes lecturas.</p>
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <div className="card-header-row">
+              <h2>Lecturas Crudas</h2>
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowRaw(!showRaw)}>
+                {showRaw ? 'Ocultar' : 'Mostrar'}
+              </button>
+            </div>
+            {showRaw && (
+              loadingReadings ? (
+                <div className="spinner" />
+              ) : rawReadings.length === 0 ? (
+                <p className="empty-state">Sin lecturas registradas.</p>
+              ) : (
+                <div className="hr-table-wrapper">
+                  <table className="hr-table">
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Fecha/Hora</th>
+                        <th>BPM</th>
+                        <th>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rawReadings.map((r, i) => {
+                        const status = getBpmStatus(r.bpm);
+                        return (
+                          <tr key={r.reading_id || i}>
+                            <td>{i + 1}</td>
+                            <td>{formatDate(r.timestamp)}</td>
+                            <td className={`bpm-value ${status.className}`}>{r.bpm}</td>
+                            <td><span className={`hr-badge ${status.className}`}>{status.label}</span></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <p className="hr-count">{rawReadings.length} lectura(s)</p>
+                </div>
+              )
             )}
           </div>
-
-          {error && <div className="error-msg">{error}</div>}
-
-          {readings.length === 0 && !loading && studentId.trim() && (
-            <p className="empty-state">No hay lecturas registradas para este estudiante.</p>
-          )}
-
-          {!studentId.trim() && (
-            <p className="empty-state">Ingresa el ID de un estudiante para consultar sus lecturas.</p>
-          )}
-
-          {readings.length > 0 && (
-            <div className="hr-table-wrapper">
-              <table className="hr-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>Fecha/Hora</th>
-                    <th>BPM</th>
-                    <th>Estado</th>
-                    <th>Dispositivo</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {readings.map((r, i) => {
-                    const status = getBpmStatus(r.bpm);
-                    return (
-                      <tr key={r.reading_id || i}>
-                        <td>{i + 1}</td>
-                        <td>{formatDate(r.timestamp)}</td>
-                        <td className={`bpm-value ${status.className}`}>{r.bpm}</td>
-                        <td><span className={`hr-badge ${status.className}`}>{status.label}</span></td>
-                        <td className="hr-device-id">{r.device_id?.substring(0, 8) || '-'}...</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              <p className="hr-count">Mostrando {readings.length} lectura(s)</p>
-            </div>
-          )}
         </div>
       </div>
-
-      <details className="dev-tools">
-        <summary>🛠️ Información del Dispositivo</summary>
-        <div className="hr-device-info">
-          <p><strong>Ruta:</strong> POST /api/v1/devices/reading</p>
-          <p><strong>Autenticación:</strong> Encabezado X-Api-Key</p>
-          <p><strong>Formato:</strong> {'{"bpm": 72, "timestamp": "2026-06-28T10:30:00Z"}'}</p>
-          <p><strong>Rango BPM:</strong> 30 - 220</p>
-        </div>
-      </details>
     </div>
   );
 }

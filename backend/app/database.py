@@ -127,11 +127,11 @@ def get_or_create_heart_rate_table():
             table = db.create_table(
                 TableName=table_name,
                 KeySchema=[
-                    {'AttributeName': 'student_id', 'KeyType': 'HASH'},
+                    {'AttributeName': 'device_id', 'KeyType': 'HASH'},
                     {'AttributeName': 'timestamp', 'KeyType': 'RANGE'}
                 ],
                 AttributeDefinitions=[
-                    {'AttributeName': 'student_id', 'AttributeType': 'S'},
+                    {'AttributeName': 'device_id', 'AttributeType': 'S'},
                     {'AttributeName': 'timestamp', 'AttributeType': 'S'}
                 ],
                 ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
@@ -140,6 +140,37 @@ def get_or_create_heart_rate_table():
             return table
         else:
             raise e
+
+def get_or_create_pairing_codes_table():
+    db = get_dynamodb_resource()
+    table_name = "pairing_codes"
+    try:
+        table = db.Table(table_name)
+        table.load()
+        return table
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ResourceNotFoundException':
+            table = db.create_table(
+                TableName=table_name,
+                KeySchema=[{'AttributeName': 'code', 'KeyType': 'HASH'}],
+                AttributeDefinitions=[
+                    {'AttributeName': 'code', 'AttributeType': 'S'}
+                ],
+                ProvisionedThroughput={'ReadCapacityUnits': 5, 'WriteCapacityUnits': 5}
+            )
+            table.wait_until_exists()
+            # Habilitar TTL después de crear la tabla
+            try:
+                db.meta.client.update_time_to_live(
+                    TableName=table_name,
+                    TimeToLiveSpecification={'Enabled': True, 'AttributeName': 'expires_at_ttl'}
+                )
+            except Exception:
+                pass  # TTL opcional, si falla en local no es crítico
+            return table
+        else:
+            raise e
+
 
 def get_or_create_audit_log_table():
     db = get_dynamodb_resource()

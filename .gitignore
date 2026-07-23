@@ -37,6 +37,18 @@ venv.bak/
 # Docker
 .docker/
 
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# PlatformIO (ESP32 firmware)
+.pio/
+
+# Mosquitto (generated runtime files)
+mosquitto/data/passwd
+mosquitto/data/mosquitto.db
+
 # IDEs
 .vscode/
 .idea/
